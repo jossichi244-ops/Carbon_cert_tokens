@@ -7,7 +7,7 @@
 
 ---
 
-## 🎯 MỤC LỤC
+## MỤC LỤC
 
 1.  [Giới thiệu Tín Chỉ Carbon (Dành cho Tiến sĩ)](#-1-giới-thiệu-tín-chỉ-carbon-dành-cho-tiến-sĩ)
 2.  [Kiến trúc Hệ Thống Tổng Quan](#-2-kiến-trúc-hệ-thống-tổng-quan)
@@ -23,7 +23,7 @@
 
 ---
 
-## 🧠 1. Giới thiệu Tín Chỉ Carbon (Dành cho Tiến sĩ)
+## 1. Giới thiệu Tín Chỉ Carbon 
 
 ### Tín chỉ carbon là gì?
 Một **tín chỉ carbon** đại diện cho **một tấn CO₂ (hoặc khí nhà kính tương đương) đã được loại bỏ, tránh phát thải hoặc hấp thụ khỏi khí quyển**. Đây là một **công cụ tài chính** giúp các doanh nghiệp hoặc quốc gia “bù trừ” lượng khí thải của họ bằng cách đầu tư vào các dự án giảm phát thải ở nơi khác.
@@ -39,7 +39,7 @@ Một **tín chỉ carbon** đại diện cho **một tấn CO₂ (hoặc khí n
 
 ---
 
-## 🏗️ 2. Kiến trúc Hệ Thống Tổng Quan
+## 2. Kiến trúc Hệ Thống Tổng Quan
 
 Hệ thống gồm 3 tầng chính:
 
@@ -60,7 +60,7 @@ Hệ thống gồm 3 tầng chính:
 
 ---
 
-## 📥 3. Luồng Dữ Liệu & Input Đầu Vào (Input)
+## 3. Luồng Dữ Liệu & Input Đầu Vào (Input)
 
 ### Nguồn dữ liệu đầu vào (Input):
 
@@ -87,7 +87,7 @@ graph LR
 
 ---
 
-## 📊 4. Tiêu Chí & Phương Pháp Đánh Giá Chất Lượng Tín Chỉ Carbon
+## 4. Tiêu Chí & Phương Pháp Đánh Giá Chất Lượng Tín Chỉ Carbon
 
 ### 4.1. Các Phương Pháp Luận (Methodology) Phổ Biến
 
@@ -145,7 +145,7 @@ Tín chỉ carbon (tCO₂e) = (Lượng CH₄ giảm (kg) × 25) / 1000
 
 ---
 
-## 📑 5. Quy Trình Tạo Hồ Sơ Gửi Đơn Vị Kiểm Kê (Government Review)
+## 5. Quy Trình Tạo Hồ Sơ Gửi Đơn Vị Kiểm Kê (Government Review)
 
 ### Bước 1: Thu thập & Xác minh Minh chứng
 -   Dữ liệu IoT và tài liệu được xử lý và lưu vào `collection_carbon_evidence`.
@@ -171,7 +171,7 @@ Tín chỉ carbon (tCO₂e) = (Lượng CH₄ giảm (kg) × 25) / 1000
 
 ---
 
-## 💹 6. Quy Trình Giao Dịch Token trên Sàn
+## 6. Quy Trình Giao Dịch Token trên Sàn
 
 Sau khi được phê duyệt, hệ thống sẽ:
 
@@ -187,7 +187,7 @@ Sau khi được phê duyệt, hệ thống sẽ:
 
 ---
 
-## 🧾 7. Tuân Thủ Pháp Luật & Kê Khai Thuế
+## 7. Tuân Thủ Pháp Luật & Kê Khai Thuế
 
 Hệ thống phân biệt rõ 2 loại thu nhập để tính thuế:
 
@@ -206,7 +206,7 @@ Hệ thống phân biệt rõ 2 loại thu nhập để tính thuế:
 
 ---
 
-## 🚀 8. Kết Luận & Hướng Phát Triển
+## 8. Kết Luận & Hướng Phát Triển
 
 Hệ thống này là một **giải pháp toàn diện**, biến **hành động nông nghiệp bền vững** thành **tài sản kỹ thuật số có giá trị**, đồng thời đảm bảo **minh bạch, tuân thủ pháp luật và tạo thu nhập thực tế cho người nông dân**.
 
