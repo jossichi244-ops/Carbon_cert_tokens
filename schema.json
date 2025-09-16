@@ -1,0 +1,4081 @@
+[
+  {
+    "_id": "collection_users",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "UserAccount",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+
+            "user_id": {
+              "type": "string",
+              "unique": true,
+              "description": "Mã định danh duy nhất của người dùng"
+            },
+
+            "full_name": {
+              "type": "string",
+              "description": "Họ và tên chủ hộ hoặc cá nhân"
+            },
+
+            "citizen_id": {
+              "type": "string",
+              "pattern": "^[0-9]{9,12}$",
+              "description": "Số CCCD/CMND hợp lệ tại Việt Nam"
+            },
+
+            "business_id": {
+              "type": "string",
+              "unique": true,
+              "description": "Mã số hộ kinh doanh hoặc doanh nghiệp (theo pháp luật VN)"
+            },
+
+            "farm_location": {
+              "type": "string",
+              "description": "Địa chỉ/tọa độ GPS của trang trại"
+            },
+
+            "phone_number": {
+              "type": "string",
+              "pattern": "^(\\+84|0)[0-9]{9,10}$",
+              "description": "Số điện thoại liên hệ"
+            },
+
+            "email": {
+              "type": "string",
+              "format": "email",
+              "description": "Email đăng ký tài khoản"
+            },
+
+            "public_key": {
+              "type": "string",
+              "description": "Khóa công khai blockchain để xác thực giao dịch"
+            },
+
+            "wallet_address": {
+              "type": "string",
+              "description": "Địa chỉ ví blockchain gắn với QR code"
+            },
+
+            "qr_code": {
+              "type": "string",
+              "description": "Mã QR (chứa thông tin mã hóa: user_id + wallet_address + public_key)"
+            },
+
+            "signature": {
+              "type": "string",
+              "description": "Chữ ký số cho các giao dịch"
+            },
+
+            "status": {
+              "type": "string",
+              "enum": ["active", "suspended", "closed"],
+              "default": "active",
+              "description": "Trạng thái tài khoản"
+            },
+
+            "tax_info": {
+              "type": "object",
+              "properties": {
+                "tax_id": {
+                  "type": "string",
+                  "description": "Mã số thuế cá nhân/hộ kinh doanh"
+                },
+                "auto_report_enabled": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Bật/tắt chế độ nộp báo cáo thuế tự động"
+                },
+                "last_report_date": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "Ngày nộp báo cáo gần nhất"
+                }
+              }
+            },
+
+            "balance": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "description": "Số dư trên ví (VND hoặc token blockchain)."
+            },
+
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Thời gian tạo tài khoản"
+            },
+
+            "updated_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Thời gian cập nhật gần nhất"
+            }
+          },
+          "required": [
+            "_id",
+            "user_id",
+            "full_name",
+            "citizen_id",
+            "business_id",
+            "farm_location",
+            "phone_number",
+            "public_key",
+            "wallet_address",
+            "qr_code",
+            "status",
+            "created_at"
+          ]
+        },
+        "jsonSample": [
+          {
+            "_id": "66b8b2a0d1e8f001c8e4f123",
+            "user_id": "user_farm_001",
+            "full_name": "Nguyễn Văn A",
+            "citizen_id": "012345678901",
+            "business_id": "HKD123456789",
+            "farm_location": "Thôn A, Xã B, Huyện C, Tỉnh D",
+            "phone_number": "0987654321",
+            "email": "nguyenvana@example.com",
+            "public_key": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----",
+            "wallet_address": "0x123abc456def789ghi",
+            "qr_code": "https://example.com/wallets/user_farm_001",
+            "signature": "signature_abc123",
+            "status": "active",
+            "tax_info": {
+              "tax_id": "TAX123456",
+              "auto_report_enabled": true,
+              "last_report_date": "2025-07-01T10:00:00Z"
+            },
+            "balance": 2500000,
+            "created_at": "2025-01-10T08:30:00Z",
+            "updated_at": "2025-08-15T14:20:00Z"
+          }
+        ]
+      }
+    },
+    "private": {
+      "node_function": {
+        "edge": [
+          {
+            "pipeline": [
+              {
+                "$addFields": {
+                  "key_pair": {
+                    "$function": {
+                      "body": "function() { const crypto = require('crypto'); const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'secp256k1', publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs8', format: 'pem' } }); return { publicKey, privateKey }; }",
+                      "args": [],
+                      "lang": "js"
+                    }
+                  }
+                }
+              },
+              {
+                "$addFields": {
+                  "public_key": "$key_pair.publicKey",
+                  "private_key": "$key_pair.privateKey"
+                }
+              },
+              {
+                "$addFields": {
+                  "raw_qr_data": {
+                    "user_id": "$user_id",
+                    "wallet_address": "$wallet_address",
+                    "public_key": "$public_key",
+                    "timestamp": { "$toLong": "$$NOW" }
+                  }
+                }
+              },
+              {
+                "$addFields": {
+                  "encrypted_qr_data": {
+                    "$function": {
+                      "body": "function(data, secretKey) { const crypto = require('crypto'); const cipher = crypto.createCipher('aes-256-cbc', secretKey); let encrypted = cipher.update(JSON.stringify(data), 'utf8', 'hex'); encrypted += cipher.final('hex'); return encrypted; }",
+                      "args": ["$raw_qr_data", "your-secret-key"],
+                      "lang": "js"
+                    }
+                  }
+                }
+              },
+              {
+                "$addFields": {
+                  "qr_code": {
+                    "$concat": [
+                      "https://example.com/wallets/",
+                      "$user_id",
+                      "?q=",
+                      "$encrypted_qr_data"
+                    ]
+                  }
+                }
+              },
+              {
+                "$addFields": {
+                  "signature": {
+                    "$function": {
+                      "body": "function(privateKey, data) { const crypto = require('crypto'); const sign = crypto.createSign('SHA256'); sign.update(data); sign.end(); return sign.sign(privateKey, 'base64'); }",
+                      "args": ["$private_key", "$encrypted_qr_data"],
+                      "lang": "js"
+                    }
+                  }
+                }
+              },
+              {
+                "$unset": ["key_pair", "private_key", "raw_qr_data"]
+              },
+              {
+                "$merge": {
+                  "into": "collection_users",
+                  "on": "_id",
+                  "whenMatched": "merge",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ],
+            "purpose": "Tạo keypair, mã hóa QR code và gắn ví blockchain vật lý cho người dùng.",
+            "data_input_from_node": [],
+            "data_output_to_node": []
+          }
+        ]
+      }
+    },
+
+    "personal": {
+      "node_info": {
+        "name": "",
+        "author": "Joshept",
+        "version": "1.0",
+        "year": "2025"
+      }
+    }
+  },
+
+  {
+    "_id": "collection_sessions",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "UserSession",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "user_id": { "type": "string", "index": true },
+            "wallet_address": { "type": "string" },
+            "public_key": { "type": "string" },
+            "session_token": { "type": "string", "unique": true },
+            "refresh_token": { "type": "string" },
+            "device_info": { "type": "string" },
+            "ip_address": { "type": "string", "format": "ipv4" },
+            "expires_at": { "type": "string", "format": "date-time" },
+            "created_at": { "type": "string", "format": "date-time" },
+            "last_active": { "type": "string", "format": "date-time" },
+            "status": {
+              "type": "string",
+              "enum": ["active", "expired", "revoked"],
+              "default": "active"
+            }
+          },
+          "required": [
+            "_id",
+            "user_id",
+            "session_token",
+            "expires_at",
+            "created_at"
+          ]
+        },
+        "jsonSample": [
+          {
+            "_id": "sess_abc123",
+            "user_id": "user_farm_001",
+            "wallet_address": "0x123abc...",
+            "session_token": "jwt_token_xyz",
+            "refresh_token": "refresh_zyx",
+            "device_info": "Mobile - Android 14",
+            "ip_address": "192.168.1.1",
+            "expires_at": "2025-08-16T10:00:00Z",
+            "created_at": "2025-08-15T14:30:00Z",
+            "last_active": "2025-08-15T14:35:00Z",
+            "status": "active"
+          }
+        ]
+      }
+    },
+    "private": {
+      "node_function": {
+        "edge": [
+          {
+            "pipeline": [
+              {
+                "$addFields": {
+                  "session_token": {
+                    "$function": {
+                      "body": "function(userId, wallet, secret) { const jwt = require('jsonwebtoken'); return jwt.sign({ userId, wallet }, secret, { expiresIn: '1h' }); }",
+                      "args": [
+                        "$user_id",
+                        "$wallet_address",
+                        "your_jwt_secret"
+                      ],
+                      "lang": "js"
+                    }
+                  },
+                  "refresh_token": {
+                    "$function": {
+                      "body": "function() { return require('crypto').randomBytes(32).toString('hex'); }",
+                      "args": [],
+                      "lang": "js"
+                    }
+                  },
+                  "expires_at": {
+                    "$dateAdd": {
+                      "startDate": "$$NOW",
+                      "unit": "hour",
+                      "amount": 1
+                    }
+                  }
+                }
+              },
+              {
+                "$merge": {
+                  "into": "collection_sessions",
+                  "on": "user_id",
+                  "whenMatched": "replace",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ],
+            "purpose": "Tạo session sau khi xác thực chữ ký thành công."
+          }
+        ]
+      }
+    }
+  },
+
+  {
+    "_id": "collection_auth_challenges",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "AuthChallenge",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "user_id": { "type": "string", "index": true },
+            "wallet_address": { "type": "string" },
+            "challenge": {
+              "type": "string",
+              "description": "Chuỗi ngẫu nhiên để ký"
+            },
+            "expires_at": { "type": "string", "format": "date-time" },
+            "used": { "type": "boolean", "default": false },
+            "created_at": { "type": "string", "format": "date-time" }
+          },
+          "required": ["_id", "challenge", "expires_at", "created_at"]
+        },
+        "jsonSample": [
+          {
+            "_id": "chal_abc123",
+            "user_id": "user_farm_001",
+            "wallet_address": "0x123abc...",
+            "challenge": "nonce_7d8f9e0a1b2c",
+            "expires_at": "2025-08-15T15:00:00Z",
+            "used": false,
+            "created_at": "2025-08-15T14:30:00Z"
+          }
+        ]
+      }
+    },
+    "private": {
+      "node_function": {
+        "edge": [
+          {
+            "pipeline": [
+              {
+                "$addFields": {
+                  "challenge": {
+                    "$function": {
+                      "body": "function() { return 'nonce_' + require('crypto').randomBytes(12).toString('hex'); }",
+                      "args": [],
+                      "lang": "js"
+                    }
+                  },
+                  "expires_at": {
+                    "$dateAdd": {
+                      "startDate": "$$NOW",
+                      "unit": "minute",
+                      "amount": 5
+                    }
+                  }
+                }
+              },
+              {
+                "$merge": {
+                  "into": "collection_auth_challenges",
+                  "on": "user_id",
+                  "whenMatched": "merge",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ],
+            "purpose": "Tạo thử thách đăng nhập (nonce) cho người dùng."
+          }
+        ]
+      }
+    }
+  },
+
+  {
+    "_id": "collection_business_registration",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "BusinessRegistration",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "wallet_address": {
+              "type": "string",
+              "description": "Địa chỉ ví blockchain gắn với QR code"
+            },
+            "user_id": {
+              "type": "string",
+              "unique": true,
+              "description": "Mã định danh duy nhất của người dùng"
+            },
+            "business_id": {
+              "type": "string",
+              "unique": true,
+              "description": "Mã số hộ kinh doanh do cơ quan đăng ký cấp"
+            },
+
+            "business_name": {
+              "type": "string",
+              "description": "Tên hộ kinh doanh (theo đăng ký pháp lý)"
+            },
+
+            "business_type": {
+              "type": "string",
+              "enum": ["hộ cá thể", "doanh nghiệp nhỏ", "hợp tác xã"],
+              "default": "hộ cá thể",
+              "description": "Loại hình đăng ký kinh doanh"
+            },
+
+            "industry": {
+              "type": "string",
+              "description": "Ngành nghề kinh doanh chính (theo mã ngành VSIC)"
+            },
+
+            "farm_location": {
+              "type": "string",
+              "description": "Địa điểm đặt hộ kinh doanh/trang trại"
+            },
+
+            "capital": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Vốn đăng ký (VNĐ)"
+            },
+
+            "employees": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Số lượng lao động sử dụng"
+            },
+
+            "tax_info": {
+              "type": "object",
+              "properties": {
+                "tax_id": {
+                  "type": "string",
+                  "description": "Mã số thuế hộ kinh doanh (do cơ quan thuế cấp, bắt buộc nếu hộ kinh doanh nộp thuế theo phương pháp kê khai)"
+                },
+                "tax_office": {
+                  "type": "string",
+                  "description": "Tên cơ quan thuế trực tiếp quản lý (ví dụ: Chi cục thuế Huyện X, Cục thuế Tỉnh Y)"
+                }
+              },
+              "description": "Thông tin thuế của hộ kinh doanh, phục vụ nghĩa vụ kê khai và nộp thuế"
+            },
+
+            "license_info": {
+              "type": "object",
+              "properties": {
+                "license_number": {
+                  "type": "string",
+                  "description": "Số Giấy chứng nhận đăng ký hộ kinh doanh"
+                },
+                "issue_date": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "Ngày cấp giấy chứng nhận"
+                },
+                "issued_by": {
+                  "type": "string",
+                  "description": "Cơ quan cấp giấy phép (UBND huyện/quận)"
+                }
+              }
+            },
+
+            "status": {
+              "type": "string",
+              "enum": ["pending", "active", "suspended", "revoked", "closed"],
+              "default": "active",
+              "description": "Tình trạng pháp lý của hộ kinh doanh"
+            },
+
+            "created_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Thời gian đăng ký"
+            },
+
+            "updated_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Thời gian cập nhật gần nhất"
+            }
+          },
+          "required": [
+            "_id",
+            "business_id",
+            "business_name",
+            "business_type",
+            "industry",
+            "farm_location",
+            "owner",
+            "capital",
+            "created_at"
+          ]
+        },
+        "jsonSample": [
+          {
+            "_id": "66c1a9b0d1e8f001c8e4f789",
+            "business_id": "HKD_00012345",
+            "business_name": "Hộ Kinh Doanh Nguyễn Văn A",
+            "business_type": "hộ cá thể",
+            "industry": "Trồng rau hữu cơ",
+            "farm_location": "Thôn A, Xã B, Huyện C, Tỉnh D",
+            "capital": 200000000,
+            "owner": {
+              "full_name": "Nguyễn Văn A",
+              "citizen_id": "012345678901",
+              "address": "123 Đường X, Phường Y, Quận Z, Hà Nội",
+              "phone_number": "0987654321",
+              "email": "nguyenvana@example.com"
+            },
+            "employees": 5,
+            "tax_info": {
+              "tax_id": "TAX123456789",
+              "tax_office": "Chi cục thuế Huyện C"
+            },
+            "license_info": {
+              "license_number": "GCN_987654321",
+              "issue_date": "2025-01-15",
+              "issued_by": "UBND Huyện C"
+            },
+            "status": "active",
+            "created_at": "2025-01-15T08:30:00Z",
+            "updated_at": "2025-08-15T14:20:00Z"
+          }
+        ]
+      }
+    }
+  },
+
+  {
+    "_id": "collection_carbon_program_enrollment",
+    "public": {
+      "jsonSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "CarbonEvidence",
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+
+          "evidence_id": { "type": "string", "unique": true },
+          "user_id": {
+            "type": "string",
+            "unique": true,
+            "description": "Mã định danh duy nhất của người dùng"
+          },
+          "wallet_address": {
+            "type": "string",
+            "description": "Địa chỉ ví blockchain gắn với QR code"
+          },
+
+          "enrollment_id": {
+            "type": "string",
+            "description": "Liên kết với bản ghi trong collection_carbon_program_enrollment"
+          },
+
+          "business_id": {
+            "type": "string",
+            "description": "Liên kết với hộ kinh doanh"
+          },
+
+          "evidence_type": {
+            "type": "string",
+            "enum": [
+              "soil_test",
+              "water_level_data",
+              "fertilizer_receipt",
+              "satellite_image",
+              "farm_photo",
+              "drone_video",
+              "audit_report",
+              "other"
+            ],
+            "description": "Loại minh chứng"
+          },
+
+          "description": {
+            "type": "string",
+            "description": "Mô tả ngắn gọn về minh chứng"
+          },
+
+          "file_links": {
+            "type": "array",
+            "items": { "type": "string", "format": "uri" },
+            "description": "Danh sách link ảnh/video/tài liệu (S3, IPFS, cloud…)"
+          },
+          "methodology_code": {
+            "type": "string",
+            "description": "Mã phương pháp tính toán carbon (VD: VM0042, AMS-II.G, VCS-Agro)"
+          },
+
+          "monitoring_period": {
+            "type": "object",
+            "properties": {
+              "start_date": { "type": "string", "format": "date" },
+              "end_date": { "type": "string", "format": "date" }
+            },
+            "description": "Khoảng thời gian minh chứng có hiệu lực"
+          },
+
+          "measured_value": {
+            "type": "number",
+            "description": "Giá trị đo được từ minh chứng (VD: lượng CH4 giảm)"
+          },
+
+          "measurement_unit": {
+            "type": "string",
+            "description": "Đơn vị đo (kg CH4, tCO2e, ha, m3 nước...)"
+          },
+
+          "verification_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Ngày kiểm toán viên xác minh minh chứng"
+          },
+
+          "verifier_org": {
+            "type": "string",
+            "description": "Tên tổ chức kiểm toán/độc lập xác minh"
+          },
+
+          "certificate_reference": {
+            "type": "string",
+            "description": "Mã chứng chỉ/đợt xác minh mà minh chứng này được sử dụng"
+          },
+
+          "hash_checksum": {
+            "type": "string",
+            "description": "Mã SHA256 để đảm bảo tính toàn vẹn của file minh chứng"
+          },
+
+          "collected_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Ngày thu thập minh chứng"
+          },
+
+          "submitted_by": {
+            "type": "string",
+            "description": "User ID hoặc người nông dân cung cấp"
+          },
+
+          "verified_by": {
+            "type": "string",
+            "description": "Auditor/Verifier ID (nếu đã được kiểm toán viên xác minh)"
+          },
+
+          "verification_status": {
+            "type": "string",
+            "enum": ["pending", "under_review", "verified", "rejected"],
+            "default": "pending",
+            "description": "Trạng thái xác minh minh chứng"
+          },
+
+          "review_notes": {
+            "type": "string",
+            "description": "Ghi chú của kiểm toán viên"
+          },
+
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        },
+        "required": [
+          "_id",
+          "evidence_id",
+          "enrollment_id",
+          "evidence_type",
+          "file_links",
+          "collected_date",
+          "submitted_by",
+          "created_at"
+        ]
+      }
+    },
+    "private": {
+      "node_function": {
+        "edge": [
+          {
+            "name": "soil_test_pipeline",
+            "description": "Chuyển CarbonEvidence loại soil_test thành JSON chuẩn & publish CID lên chain",
+            "chainId": 137,
+            "contract": "EvidencePipeline_SoilTest",
+            "contractAddress": "0xYourContractAddr",
+            "schema": {
+              "name": "CarbonEvidence",
+              "version": "1.0.0",
+              "schemaHash": "0xSCHEMA_HASH_SHA256_OF_JSON_SCHEMA"
+            },
+            "pipeline": [
+              {
+                "op": "match",
+                "collection": "carbon_evidence",
+                "query": {
+                  "evidence_type": "soil_test",
+                  "verification_status": { "$in": ["verified", "under_review"] }
+                }
+              },
+              {
+                "op": "project",
+                "spec": {
+                  "_id": 1,
+                  "evidence_id": 1,
+                  "enrollment_id": 1,
+                  "wallet_address": 1,
+                  "evidence_type": 1,
+                  "file_links": 1,
+                  "methodology_code": 1,
+                  "monitoring_period": 1,
+                  "measured_value": 1,
+                  "measurement_unit": 1,
+                  "verification_date": 1,
+                  "verifier_org": 1,
+                  "certificate_reference": 1,
+                  "hash_checksum": 1,
+                  "collected_date": 1,
+                  "submitted_by": 1,
+                  "verified_by": 1,
+                  "verification_status": 1,
+                  "created_at": 1,
+                  "updated_at": 1
+                }
+              },
+              {
+                "op": "addFields",
+                "spec": { "_schema": "CarbonEvidence@1.0.0" }
+              },
+              { "op": "sort", "spec": { "created_at": -1 } },
+              { "op": "limit", "n": 1000 }
+            ],
+            "output": {
+              "format": "json",
+              "destination": "ipfs",
+              "contentType": "application/json",
+              "canonicalOrdering": true
+            },
+            "auth": {
+              "requireWalletSignature": true,
+              "challenge": {
+                "type": "siwe",
+                "nonceLifetimeSec": 300,
+                "statement": "Run soil_test_pipeline and publish result",
+                "expiresIn": "5m"
+              },
+              "role": ["auditor", "verifier", "system"]
+            }
+          }
+        ]
+      }
+    }
+  },
+
+  {
+    "_id": "collection_iot_data_ingestion",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "IoTDataIngestion",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "ingestion_id": {
+              "type": "string",
+              "unique": true,
+              "description": "Mã định danh duy nhất cho lần thu thập dữ liệu IoT này"
+            },
+            "user_id": {
+              "type": "string",
+              "description": "Liên kết với người dùng trong collection_users"
+            },
+            "business_id": {
+              "type": "string",
+              "description": "Liên kết với hộ kinh doanh"
+            },
+            "enrollment_id": {
+              "type": "string",
+              "description": "Liên kết với chương trình carbon trong collection_carbon_program_enrollment"
+            },
+            "methodology_code": {
+              "type": "string",
+              "description": "Mã phương pháp luận (VM0042, AMS-II.G, VCS-Agro) để xác định cách xử lý dữ liệu"
+            },
+            "iot_device_id": {
+              "type": "string",
+              "description": "ID của thiết bị IoT gửi dữ liệu (VD: sensor_001_field_A)"
+            },
+            "iot_data_type": {
+              "type": "string",
+              "enum": [
+                "water_level",
+                "soil_moisture",
+                "soil_ph",
+                "temperature",
+                "humidity",
+                "satellite_image_link",
+                "drone_video_link"
+              ],
+              "description": "Loại dữ liệu IoT được thu thập"
+            },
+            "raw_data": {
+              "type": "object",
+              "description": "Dữ liệu thô từ cảm biến hoặc link đến file"
+            },
+            "ingested_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Thời điểm hệ thống nhận được dữ liệu từ IoT"
+            },
+            "mapped_evidence_id": {
+              "type": "string",
+              "description": "ID của minh chứng trong collection_carbon_evidence sau khi được xử lý và tạo ra. Ban đầu là null."
+            },
+            "nft_minting_status": {
+              "type": "string",
+              "enum": ["pending", "processing", "minted", "failed"],
+              "default": "pending",
+              "description": "Trạng thái đúc NFT cho tín chỉ carbon tương ứng"
+            },
+            "nft_transaction_hash": {
+              "type": "string",
+              "description": "Hash giao dịch trên blockchain sau khi NFT được mint thành công"
+            },
+            "nft_metadata_uri": {
+              "type": "string",
+              "format": "uri",
+              "description": "Link đến metadata của NFT (thường lưu trên IPFS)"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "raw",
+                "processed",
+                "evidence_created",
+                "verified",
+                "nft_minted"
+              ],
+              "default": "raw",
+              "description": "Trạng thái xử lý dữ liệu: Thô -> Đã xử lý -> Minh chứng tạo -> Minh chứng xác minh -> NFT đã đúc"
+            },
+            "error_log": {
+              "type": "string",
+              "description": "Ghi lại lỗi nếu quá trình xử lý hoặc mint NFT thất bại"
+            },
+            "created_at": { "type": "string", "format": "date-time" },
+            "updated_at": { "type": "string", "format": "date-time" }
+          },
+          "required": [
+            "_id",
+            "ingestion_id",
+            "user_id",
+            "enrollment_id",
+            "methodology_code",
+            "iot_device_id",
+            "iot_data_type",
+            "raw_data",
+            "ingested_at",
+            "created_at"
+          ]
+        }
+      }
+    },
+    "private": {
+      "node_function": {
+        "edge": [
+          {
+            "name": "process_iot_data",
+            "description": "Xử lý dữ liệu IoT thô, ánh xạ với methodology và tạo bản ghi minh chứng trong collection_carbon_evidence.",
+            "pipeline": [
+              {
+                "$match": {
+                  "status": "raw"
+                }
+              },
+              {
+                "$lookup": {
+                  "from": "collection_carbon_program_enrollment",
+                  "localField": "enrollment_id",
+                  "foreignField": "enrollment_id",
+                  "as": "program"
+                }
+              },
+              {
+                "$unwind": "$program"
+              },
+              {
+                "$addFields": {
+                  "processed_data": {
+                    "$function": {
+                      "body": "function(rawData, methodology, dataType) { /* Logic xử lý dữ liệu thô dựa trên methodology */ let processed = {}; if (methodology === 'VM0042' && dataType === 'water_level') { // Ví dụ: Tính số ngày mực nước < 15cm processed.days_below_threshold = rawData.values.filter(v => v < 15).length; processed.measured_value = processed.days_below_threshold * 0.5; // Hệ số giảm CH4 giả định processed.unit = 'kg CH4'; } else if (methodology === 'VCS-Agro' && dataType === 'soil_moisture') { // Xử lý cho phương pháp khác... } return processed; }",
+                      "args": [
+                        "$raw_data",
+                        "$methodology_code",
+                        "$iot_data_type"
+                      ],
+                      "lang": "js"
+                    }
+                  }
+                }
+              },
+              {
+                "$addFields": {
+                  "new_evidence": {
+                    "evidence_id": {
+                      "$concat": [
+                        "EVID-",
+                        { "$toString": "$$NOW" },
+                        "-",
+                        { "$substr": [{ "$toString": "$_id" }, 0, 8] }
+                      ]
+                    },
+                    "user_id": "$user_id",
+                    "business_id": "$business_id",
+                    "enrollment_id": "$enrollment_id",
+                    "evidence_type": {
+                      "$switch": {
+                        "branches": [
+                          {
+                            "case": {
+                              "$eq": ["$iot_data_type", "water_level"]
+                            },
+                            "then": "water_level_data"
+                          },
+                          {
+                            "case": {
+                              "$eq": ["$iot_data_type", "soil_moisture"]
+                            },
+                            "then": "soil_test"
+                          },
+                          {
+                            "case": {
+                              "$eq": ["$iot_data_type", "satellite_image_link"]
+                            },
+                            "then": "satellite_image"
+                          }
+                        ],
+                        "default": "other"
+                      }
+                    },
+                    "file_links": {
+                      "$cond": {
+                        "if": {
+                          "$in": [
+                            "$iot_data_type",
+                            ["satellite_image_link", "drone_video_link"]
+                          ]
+                        },
+                        "then": ["$raw_data.url"],
+                        "else": []
+                      }
+                    },
+                    "methodology_code": "$methodology_code",
+                    "monitoring_period": {
+                      "start_date": {
+                        "$dateToString": {
+                          "format": "%Y-%m-%d",
+                          "date": "$ingested_at"
+                        }
+                      },
+                      "end_date": {
+                        "$dateToString": {
+                          "format": "%Y-%m-%d",
+                          "date": "$ingested_at"
+                        }
+                      }
+                    },
+                    "measured_value": "$processed_data.measured_value",
+                    "measurement_unit": "$processed_data.unit",
+                    "collected_date": {
+                      "$dateToString": {
+                        "format": "%Y-%m-%d",
+                        "date": "$ingested_at"
+                      }
+                    },
+                    "submitted_by": "$user_id",
+                    "verification_status": "pending",
+                    "created_at": "$$NOW",
+                    "updated_at": "$$NOW"
+                  }
+                }
+              },
+              {
+                "$merge": {
+                  "into": "collection_carbon_evidence",
+                  "on": "evidence_id",
+                  "whenMatched": "replace",
+                  "whenNotMatched": "insert"
+                }
+              },
+              {
+                "$addFields": {
+                  "mapped_evidence_id": "$new_evidence.evidence_id",
+                  "status": "evidence_created",
+                  "updated_at": "$$NOW"
+                }
+              },
+              {
+                "$unset": ["new_evidence", "processed_data"]
+              },
+              {
+                "$merge": {
+                  "into": "collection_iot_data_ingestion",
+                  "on": "_id",
+                  "whenMatched": "merge",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ]
+          },
+          {
+            "name": "trigger_nft_minting",
+            "description": "Khi minh chứng được xác minh (verified), kích hoạt quy trình mint NFT trên blockchain.",
+            "pipeline": [
+              {
+                "$match": {
+                  "status": "evidence_created",
+                  "mapped_evidence_id": { "$ne": null }
+                }
+              },
+              {
+                "$lookup": {
+                  "from": "collection_carbon_evidence",
+                  "localField": "mapped_evidence_id",
+                  "foreignField": "evidence_id",
+                  "as": "evidence"
+                }
+              },
+              {
+                "$unwind": "$evidence"
+              },
+              {
+                "$match": {
+                  "evidence.verification_status": "verified"
+                }
+              },
+              {
+                "$addFields": {
+                  "nft_metadata": {
+                    "name": {
+                      "$concat": ["Carbon Credit - ", "$methodology_code"]
+                    },
+                    "description": {
+                      "$concat": [
+                        "Tín chỉ carbon từ dự án ",
+                        "$enrollment_id",
+                        " sử dụng phương pháp ",
+                        "$methodology_code"
+                      ]
+                    },
+                    "image": "https://example.com/nft/carbon_credit_default.png",
+                    "attributes": [
+                      {
+                        "trait_type": "Methodology",
+                        "value": "$methodology_code"
+                      },
+                      {
+                        "trait_type": "Measured Value",
+                        "value": { "$toString": "$evidence.measured_value" }
+                      },
+                      {
+                        "trait_type": "Unit",
+                        "value": "$evidence.measurement_unit"
+                      },
+                      {
+                        "trait_type": "Verified By",
+                        "value": "$evidence.verifier_org"
+                      },
+                      {
+                        "trait_type": "Issuance Date",
+                        "value": {
+                          "$dateToString": {
+                            "format": "%Y-%m-%d",
+                            "date": "$$NOW"
+                          }
+                        }
+                      }
+                    ],
+                    "external_url": {
+                      "$concat": [
+                        "https://your-platform.com/evidence/",
+                        "$mapped_evidence_id"
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "$addFields": {
+                  "ipfs_cid": {
+                    "$function": {
+                      "body": "async function(metadata) { /* Giả lập upload lên IPFS và trả về CID */ const cid = 'Qm...' + Math.random().toString(36).substring(2, 15); return cid; }",
+                      "args": ["$nft_metadata"],
+                      "lang": "js"
+                    }
+                  },
+                  "nft_metadata_uri": {
+                    "$concat": [
+                      "ipfs://",
+                      {
+                        "$function": {
+                          "body": "async function(metadata) { const cid = 'Qm...' + Math.random().toString(36).substring(2, 15); return cid; }",
+                          "args": ["$nft_metadata"],
+                          "lang": "js"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "$addFields": {
+                  "nft_minting_status": "processing",
+                  "updated_at": "$$NOW"
+                }
+              },
+              {
+                "$merge": {
+                  "into": "collection_iot_data_ingestion",
+                  "on": "_id",
+                  "whenMatched": "merge",
+                  "whenNotMatched": "insert"
+                }
+              },
+              {
+                "$addFields": {
+                  "blockchain_tx_hash": {
+                    "$function": {
+                      "body": "async function(walletAddress, metadataURI) { /* Gọi smart contract để mint NFT */ const txHash = '0x...' + Math.random().toString(36).substring(2, 64); return txHash; }",
+                      "args": ["$user_id", "$nft_metadata_uri"],
+                      "lang": "js"
+                    }
+                  }
+                }
+              },
+              {
+                "$addFields": {
+                  "nft_minting_status": "minted",
+                  "nft_transaction_hash": "$blockchain_tx_hash",
+                  "status": "nft_minted",
+                  "updated_at": "$$NOW"
+                }
+              },
+              {
+                "$unset": ["blockchain_tx_hash", "nft_metadata", "ipfs_cid"]
+              },
+              {
+                "$merge": {
+                  "into": "collection_iot_data_ingestion",
+                  "on": "_id",
+                  "whenMatched": "merge",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+
+  {
+    "_id": "collection_business_profile",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "BusinessProfile",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "business_id": {
+              "type": "string",
+              "description": "Liên kết tới collection_business_registration"
+            },
+
+            "overview": {
+              "type": "object",
+              "properties": {
+                "logo_url": { "type": "string", "format": "uri" },
+                "tagline": {
+                  "type": "string",
+                  "description": "Khẩu hiệu thương hiệu"
+                },
+                "about": {
+                  "type": "string",
+                  "description": "Giới thiệu ngắn gọn về doanh nghiệp"
+                },
+                "vision": { "type": "string", "description": "Tầm nhìn" },
+                "mission": { "type": "string", "description": "Sứ mệnh" },
+                "core_values": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Các giá trị cốt lõi"
+                }
+              }
+            },
+
+            "contact_info": {
+              "type": "object",
+              "properties": {
+                "website": { "type": "string", "format": "uri" },
+                "email": { "type": "string", "format": "email" },
+                "phone": { "type": "string" },
+                "address": { "type": "string" },
+                "social_links": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "platform": { "type": "string" },
+                      "url": { "type": "string", "format": "uri" }
+                    }
+                  }
+                }
+              }
+            },
+
+            "certifications": {
+              "type": "array",
+              "description": "Các chứng chỉ & tiêu chuẩn quốc tế",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "cert_name": { "type": "string" },
+                  "issuer": { "type": "string" },
+                  "issue_date": { "type": "string", "format": "date" },
+                  "expiry_date": { "type": "string", "format": "date" },
+                  "certificate_url": { "type": "string", "format": "uri" }
+                }
+              }
+            },
+
+            "sustainability_commitments": {
+              "type": "object",
+              "description": "Cam kết phát triển bền vững và ESG",
+              "properties": {
+                "esg_policies": { "type": "string" },
+                "carbon_neutral_goal": {
+                  "type": "string",
+                  "description": "Mục tiêu Net Zero / giảm phát thải"
+                },
+                "sdg_alignment": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "sdg_code": { "type": "string", "example": "SDG13" },
+                      "description": { "type": "string" }
+                    }
+                  }
+                },
+                "environmental_initiatives": { "type": "string" },
+                "social_initiatives": { "type": "string" },
+                "governance_practices": { "type": "string" }
+              }
+            },
+
+            "projects": {
+              "type": "array",
+              "description": "Danh mục dự án tiêu biểu (carbon project, CSR project, green project...)",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "project_id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "start_date": { "type": "string", "format": "date" },
+                  "end_date": { "type": "string", "format": "date" },
+                  "partners": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "location": { "type": "string" },
+                  "impact_metrics": {
+                    "type": "object",
+                    "properties": {
+                      "co2_reduced_tons": { "type": "number" },
+                      "area_covered_ha": { "type": "number" },
+                      "beneficiaries": { "type": "integer" }
+                    }
+                  },
+                  "evidence_links": {
+                    "type": "array",
+                    "items": { "type": "string", "format": "uri" }
+                  }
+                }
+              }
+            },
+
+            "awards": {
+              "type": "array",
+              "description": "Các giải thưởng và công nhận",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "award_name": { "type": "string" },
+                  "issuer": { "type": "string" },
+                  "year": { "type": "integer" },
+                  "description": { "type": "string" }
+                }
+              }
+            },
+
+            "media_gallery": {
+              "type": "array",
+              "description": "Thư viện ảnh/video minh họa",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string", "enum": ["image", "video"] },
+                  "url": { "type": "string", "format": "uri" },
+                  "caption": { "type": "string" }
+                }
+              }
+            },
+
+            "team": {
+              "type": "array",
+              "description": "Thông tin ban lãnh đạo / đội ngũ chủ chốt",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "full_name": { "type": "string" },
+                  "position": { "type": "string" },
+                  "bio": { "type": "string" },
+                  "linkedin_url": { "type": "string", "format": "uri" },
+                  "photo_url": { "type": "string", "format": "uri" }
+                }
+              }
+            },
+
+            "partners_clients": {
+              "type": "array",
+              "description": "Đối tác & khách hàng chiến lược",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "logo_url": { "type": "string", "format": "uri" },
+                  "website": { "type": "string", "format": "uri" }
+                }
+              }
+            },
+
+            "reports": {
+              "type": "array",
+              "description": "Báo cáo ESG / Báo cáo bền vững / Báo cáo thường niên",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "report_type": {
+                    "type": "string",
+                    "enum": ["ESG", "Sustainability", "Annual"]
+                  },
+                  "year": { "type": "integer" },
+                  "url": { "type": "string", "format": "uri" }
+                }
+              }
+            },
+
+            "created_at": { "type": "string", "format": "date-time" },
+            "updated_at": { "type": "string", "format": "date-time" }
+          },
+          "required": [
+            "_id",
+            "business_id",
+            "overview",
+            "contact_info",
+            "created_at"
+          ]
+        },
+        "jsonSample": [
+          {
+            "_id": "ENROLL_2025_CARBON_001",
+            "enrollment_id": "ENROLL-VCS-001",
+            "business_id": "HKD_00012345",
+            "user_id": "user_farm_001",
+            "program_code": "VCS-Agro",
+            "project_name": "Canh tác lúa thông minh giảm CH4",
+            "farm_location": "Thôn A, Xã B, Huyện C",
+            "methodology": "VM0042",
+            "baseline_year": 2024,
+            "total_area_ha": 5.5,
+            "crops_covered": ["Lúa"],
+            "practice_changes": [
+              { "change": "AWD", "implementation_date": "2025-01-15" },
+              {
+                "change": "organic_fertilizer",
+                "implementation_date": "2025-02-01"
+              }
+            ],
+            "expected_annual_credits": 18.5,
+            "documentation": [
+              "https://s3.example.com/docs/farm_map.pdf",
+              "https://s3.example.com/docs/soil_test_2025q1.pdf"
+            ],
+            "status": "approved",
+            "approved_at": "2025-03-10T10:00:00Z",
+            "created_at": "2025-02-15T08:00:00Z",
+            "updated_at": "2025-03-10T10:00:00Z"
+          }
+        ]
+      }
+    },
+    "private": {
+      "node_function": {
+        "edge": [
+          {
+            "pipeline": [
+              {
+                "$lookup": {
+                  "from": "collection_business_registration",
+                  "localField": "business_id",
+                  "foreignField": "business_id",
+                  "as": "registration"
+                }
+              },
+              { "$unwind": "$registration" },
+
+              {
+                "$lookup": {
+                  "from": "collection_carbon_program_enrollment",
+                  "localField": "business_id",
+                  "foreignField": "business_id",
+                  "as": "carbon_programs"
+                }
+              },
+
+              {
+                "$match": {
+                  "registration.status": "active"
+                }
+              },
+
+              {
+                "$project": {
+                  "_id": 0,
+                  "business_id": 1,
+                  "overview": 1,
+                  "contact_info": 1,
+                  "certifications": 1,
+                  "sustainability_commitments": 1,
+                  "projects": 1,
+                  "awards": 1,
+                  "partners_clients": 1,
+                  "reports": 1,
+                  "media_gallery": 1,
+                  "team": 1,
+                  "created_at": 1,
+                  "updated_at": 1,
+
+                  "registration": {
+                    "business_name": "$registration.business_name",
+                    "business_type": "$registration.business_type",
+                    "industry": "$registration.industry",
+                    "farm_location": "$registration.farm_location",
+                    "capital": "$registration.capital",
+                    "employees": "$registration.employees",
+                    "license_info": "$registration.license_info",
+                    "tax_info": "$registration.tax_info",
+                    "status": "$registration.status"
+                  },
+
+                  "carbon_programs": {
+                    "enrollment_id": 1,
+                    "program_code": 1,
+                    "project_name": 1,
+                    "methodology": 1,
+                    "baseline_year": 1,
+                    "total_area_ha": 1,
+                    "crops_covered": 1,
+                    "practice_changes": 1,
+                    "expected_annual_credits": 1,
+                    "status": 1,
+                    "approved_at": 1,
+                    "documentation": 1,
+                    "created_at": 1,
+                    "updated_at": 1
+                  }
+                }
+              },
+
+              {
+                "$sort": {
+                  "updated_at": -1
+                }
+              }
+            ],
+            "purpose": "Truy vấn hồ sơ doanh nghiệp, kèm thông tin đăng ký kinh doanh và các chương trình carbon đã tham gia.",
+            "data_input_from_node": [
+              "collection_business_registration",
+              "collection_carbon_program_enrollment"
+            ],
+            "data_output_to_node": [""]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "_id": "collection_harvest_lots",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "HarvestLot",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "wallet_address": {
+              "type": "string",
+              "description": "Địa chỉ ví blockchain gắn với QR code"
+            },
+            "user_id": {
+              "type": "string",
+              "unique": true,
+              "description": "Mã định danh duy nhất của người dùng"
+            },
+
+            "business_id": { "type": "string" },
+
+            "lot_id": { "type": "string", "unique": true },
+            "crop_name": { "type": "string" },
+            "variety": { "type": "string", "description": "Giống" },
+            "planting_date": { "type": "string", "format": "date" },
+            "harvest_date": { "type": "string", "format": "date" },
+
+            "initial_qty": {
+              "type": "number",
+              "description": "Sản lượng nhập kho (kg/tấn)"
+            },
+            "uom": { "type": "string" },
+
+            "cost": {
+              "type": "object",
+              "properties": {
+                "seed_cost": { "type": "number" },
+                "fertilizer_cost": { "type": "number" },
+                "pesticide_cost": { "type": "number" },
+                "water_energy_cost": { "type": "number" },
+                "labor_cost": { "type": "number" },
+                "other_cost": { "type": "number" },
+                "total_cost": { "type": "number" },
+                "unit_cost": {
+                  "type": "number",
+                  "description": "Giá vốn / đơn vị"
+                }
+              }
+            },
+
+            "traceability": {
+              "type": "object",
+              "properties": {
+                "field_block": { "type": "string" },
+                "gh_id": { "type": "string", "description": "Mã nhà kính" },
+                "standards": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "VietGAP, Organic..."
+                }
+              }
+            },
+
+            "remaining_qty": { "type": "number" },
+            "status": {
+              "type": "string",
+              "enum": ["open", "closed"],
+              "default": "open"
+            },
+
+            "created_at": { "type": "string", "format": "date-time" },
+            "updated_at": { "type": "string", "format": "date-time" }
+          },
+          "required": [
+            "_id",
+            "user_id",
+            "business_id",
+            "lot_id",
+            "crop_name",
+            "initial_qty",
+            "uom",
+            "created_at"
+          ]
+        },
+        "jsonSample": [
+          {
+            "_id": "LOT_2025_08_001",
+            "user_id": "user_farm_001",
+            "business_id": "HKD_00012345",
+            "lot_id": "LOT_2025_08_001",
+            "crop_name": "Xà lách",
+            "variety": "Romaine",
+            "planting_date": "2025-06-20",
+            "harvest_date": "2025-08-10",
+            "initial_qty": 1200,
+            "uom": "kg",
+            "cost": {
+              "seed_cost": 2000000,
+              "fertilizer_cost": 3500000,
+              "pesticide_cost": 1200000,
+              "water_energy_cost": 800000,
+              "labor_cost": 3000000,
+              "other_cost": 500000,
+              "total_cost": 11000000,
+              "unit_cost": 9166.67
+            },
+            "traceability": {
+              "field_block": "A3",
+              "gh_id": "GH-01",
+              "standards": ["VietGAP"]
+            },
+            "remaining_qty": 700,
+            "status": "open",
+            "created_at": "2025-08-10T02:00:00Z",
+            "updated_at": "2025-08-16T02:00:00Z"
+          }
+        ]
+      }
+    }
+  },
+
+  {
+    "_id": "collection_issued_carbon_credits",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "IssuedCarbonCredit",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "credit_id": {
+              "type": "string",
+              "unique": true,
+              "description": "Mã định danh duy nhất của lô tín chỉ carbon (VD: VNCR-2025-HKD001-001)"
+            },
+            "user_id": {
+              "type": "string",
+              "description": "Mã định danh người dùng (nông dân/hộ kinh doanh)"
+            },
+            "business_id": {
+              "type": "string",
+              "description": "Mã số hộ kinh doanh"
+            },
+            "wallet_address": {
+              "type": "string",
+              "description": "Địa chỉ ví blockchain để nhận tín chỉ"
+            },
+            "enrollment_id": {
+              "type": "string",
+              "description": "ID của bản đăng ký chương trình carbon liên quan"
+            },
+            "program_code": {
+              "type": "string",
+              "description": "Mã chương trình (VCS-Agro, VM0042, VN-Carbon-Pilot...)"
+            },
+            "project_name": {
+              "type": "string",
+              "description": "Tên dự án giảm phát thải"
+            },
+            "issuance_period": {
+              "type": "object",
+              "properties": {
+                "start_date": { "type": "string", "format": "date" },
+                "end_date": { "type": "string", "format": "date" },
+                "description": "Khoảng thời gian mà tín chỉ này đại diện cho lượng phát thải đã giảm"
+              }
+            },
+            "total_credits_issued": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Tổng số tín chỉ được cấp trong lô này (đơn vị: tCO2e)"
+            },
+            "credit_status": {
+              "type": "string",
+              "enum": ["issued", "listed", "sold", "retired"],
+              "default": "issued",
+              "description": "Trạng thái của tín chỉ: Đã cấp, Đã niêm yết, Đã bán, Đã huỷ (sử dụng để bù trừ)"
+            },
+            "evidence_references": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Danh sách ID các minh chứng (evidence_id) được sử dụng để tính toán và xác minh lô tín chỉ này"
+            },
+            "verifier_report": {
+              "type": "string",
+              "format": "uri",
+              "description": "Link tới báo cáo kiểm toán/đánh giá độc lập cuối cùng"
+            },
+            "certificate_uri": {
+              "type": "string",
+              "format": "uri",
+              "description": "Link tới chứng chỉ kỹ thuật số hoặc NFT đại diện cho lô tín chỉ"
+            },
+            "blockchain_tx_hash": {
+              "type": "string",
+              "description": "Hash giao dịch trên blockchain khi tín chỉ được mint (đúc) hoặc chuyển vào ví nông dân"
+            },
+            "issued_by": {
+              "type": "string",
+              "description": "Tổ chức/Đơn vị cấp tín chỉ (Cơ quan quản lý nhà nước, Tổ chức thẩm định, hoặc hệ thống của bạn)"
+            },
+            "issued_date": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Ngày cấp tín chỉ"
+            },
+            "created_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "updated_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "_id",
+            "credit_id",
+            "user_id",
+            "business_id",
+            "enrollment_id",
+            "program_code",
+            "issuance_period",
+            "total_credits_issued",
+            "issued_date",
+            "created_at"
+          ]
+        }
+      }
+    }
+  },
+
+  {
+    "_id": "collection_government_review",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "GovernmentReview",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "review_id": {
+              "type": "string",
+              "unique": true,
+              "description": "Mã hồ sơ xét duyệt duy nhất (VD: GOV-VNCR-2025-001)"
+            },
+            "user_id": {
+              "type": "string",
+              "description": "Mã người dùng"
+            },
+            "business_id": {
+              "type": "string",
+              "description": "Mã hộ kinh doanh"
+            },
+            "enrollment_id": {
+              "type": "string",
+              "description": "ID chương trình carbon"
+            },
+            "program_code": {
+              "type": "string",
+              "description": "Mã phương pháp (VM0042, VCS-Agro...)"
+            },
+            "project_name": {
+              "type": "string",
+              "description": "Tên dự án"
+            },
+            "evidence_list": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "evidence_id": { "type": "string" },
+                  "measured_value": { "type": "number" },
+                  "measurement_unit": { "type": "string" },
+                  "verification_date": { "type": "string", "format": "date" },
+                  "verifier_org": { "type": "string" }
+                }
+              },
+              "description": "Danh sách các minh chứng đã được verified, dùng để tính toán tín chỉ"
+            },
+            "calculated_credits": {
+              "type": "number",
+              "description": "Tổng lượng tín chỉ carbon đề nghị cấp (tCO2e), tính từ evidence_list"
+            },
+            "supporting_documents": {
+              "type": "array",
+              "items": { "type": "string", "format": "uri" },
+              "description": "Link đến các tài liệu hỗ trợ: báo cáo kiểm toán, bản đồ dự án, hợp đồng..."
+            },
+            "submitted_to_authority": {
+              "type": "object",
+              "properties": {
+                "authority_name": {
+                  "type": "string",
+                  "description": "Tên cơ quan nhà nước tiếp nhận (VD: Bộ TNMT, Sở TNMT Tỉnh X)"
+                },
+                "submission_date": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "Ngày gửi hồ sơ"
+                },
+                "submission_method": {
+                  "type": "string",
+                  "enum": ["online_portal", "email", "paper", "api"],
+                  "description": "Phương thức gửi"
+                },
+                "tracking_number": {
+                  "type": "string",
+                  "description": "Số theo dõi hồ sơ từ cơ quan nhà nước"
+                }
+              }
+            },
+            "review_status": {
+              "type": "string",
+              "enum": [
+                "pending_submission",
+                "submitted",
+                "under_review",
+                "approved",
+                "rejected",
+                "requires_amendment"
+              ],
+              "default": "pending_submission",
+              "description": "Trạng thái xét duyệt"
+            },
+            "review_notes": {
+              "type": "string",
+              "description": "Ý kiến phản hồi từ cơ quan nhà nước"
+            },
+            "approved_by": {
+              "type": "string",
+              "description": "Tên/cấp bậc người ký quyết định phê duyệt"
+            },
+            "approval_date": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Ngày phê duyệt"
+            },
+            "official_seal_hash": {
+              "type": "string",
+              "description": "Mã hash của con dấu điện tử hoặc chữ ký số của cơ quan nhà nước (nếu có)"
+            },
+            "next_action": {
+              "type": "string",
+              "description": "Hành động tiếp theo cần thực hiện (VD: 'mint_tokens', 'resubmit_evidence')"
+            },
+            "created_at": { "type": "string", "format": "date-time" },
+            "updated_at": { "type": "string", "format": "date-time" }
+          },
+          "required": [
+            "_id",
+            "review_id",
+            "user_id",
+            "business_id",
+            "enrollment_id",
+            "evidence_list",
+            "calculated_credits",
+            "review_status",
+            "created_at"
+          ]
+        }
+      }
+    },
+    "private": {
+      "node_function": {
+        "edge": [
+          {
+            "name": "create_gov_review_from_verified_evidence",
+            "description": "Tự động tạo hồ sơ gửi cơ quan nhà nước từ các minh chứng đã verified.",
+            "pipeline": [
+              {
+                "$match": {
+                  "status": "evidence_created",
+                  "mapped_evidence_id": { "$ne": null }
+                }
+              },
+              {
+                "$lookup": {
+                  "from": "collection_carbon_evidence",
+                  "localField": "mapped_evidence_id",
+                  "foreignField": "evidence_id",
+                  "as": "evidence"
+                }
+              },
+              {
+                "$unwind": "$evidence"
+              },
+              {
+                "$match": {
+                  "evidence.verification_status": "verified"
+                }
+              },
+              {
+                "$lookup": {
+                  "from": "collection_carbon_program_enrollment",
+                  "localField": "enrollment_id",
+                  "foreignField": "enrollment_id",
+                  "as": "program"
+                }
+              },
+              {
+                "$unwind": "$program"
+              },
+              {
+                "$group": {
+                  "_id": "$enrollment_id",
+                  "user_id": { "$first": "$user_id" },
+                  "business_id": { "$first": "$business_id" },
+                  "program_code": { "$first": "$program.program_code" },
+                  "project_name": { "$first": "$program.project_name" },
+                  "evidence_list": {
+                    "$push": {
+                      "evidence_id": "$evidence.evidence_id",
+                      "measured_value": "$evidence.measured_value",
+                      "measurement_unit": "$evidence.measurement_unit",
+                      "verification_date": "$evidence.verification_date",
+                      "verifier_org": "$evidence.verifier_org"
+                    }
+                  },
+                  "total_credits": { "$sum": "$evidence.measured_value" }
+                }
+              },
+              {
+                "$addFields": {
+                  "review_id": {
+                    "$concat": [
+                      "GOV-VNCR-",
+                      { "$dateToString": { "format": "%Y", "date": "$$NOW" } },
+                      "-",
+                      { "$toString": { "$size": "$evidence_list" } },
+                      "-",
+                      { "$substr": [{ "$toString": "$$NOW" }, 0, 8] }
+                    ]
+                  },
+                  "calculated_credits": "$total_credits",
+                  "supporting_documents": [],
+                  "review_status": "pending_submission",
+                  "created_at": "$$NOW",
+                  "updated_at": "$$NOW"
+                }
+              },
+              {
+                "$project": {
+                  "_id": 0,
+                  "review_id": 1,
+                  "user_id": 1,
+                  "business_id": 1,
+                  "enrollment_id": "$_id",
+                  "program_code": 1,
+                  "project_name": 1,
+                  "evidence_list": 1,
+                  "calculated_credits": 1,
+                  "supporting_documents": 1,
+                  "review_status": 1,
+                  "created_at": 1,
+                  "updated_at": 1
+                }
+              },
+              {
+                "$merge": {
+                  "into": "collection_government_review",
+                  "on": "review_id",
+                  "whenMatched": "replace",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ]
+          },
+          {
+            "name": "update_review_status_from_authority",
+            "description": "Cập nhật trạng thái hồ sơ dựa trên phản hồi từ API hoặc cổng thông tin của cơ quan nhà nước.",
+            "pipeline": [
+              {
+                "$match": {
+                  "review_id": "$$INPUT.review_id"
+                }
+              },
+              {
+                "$addFields": {
+                  "review_status": "$$INPUT.new_status",
+                  "review_notes": "$$INPUT.notes",
+                  "approved_by": "$$INPUT.approved_by",
+                  "approval_date": "$$INPUT.approval_date",
+                  "official_seal_hash": "$$INPUT.official_seal_hash",
+                  "next_action": {
+                    "$cond": {
+                      "if": { "$eq": ["$$INPUT.new_status", "approved"] },
+                      "then": "mint_tokens",
+                      "else": "pending"
+                    }
+                  },
+                  "updated_at": "$$NOW"
+                }
+              },
+              {
+                "$merge": {
+                  "into": "collection_government_review",
+                  "on": "review_id",
+                  "whenMatched": "merge",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+
+  {
+    "_id": "collection_carbon_token_minting",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "CarbonTokenMinting",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "minting_id": {
+              "type": "string",
+              "unique": true,
+              "description": "Mã giao dịch đúc token duy nhất"
+            },
+            "review_id": {
+              "type": "string",
+              "description": "Liên kết đến hồ sơ đã được cơ quan nhà nước phê duyệt"
+            },
+            "user_id": { "type": "string" },
+            "business_id": { "type": "string" },
+            "wallet_address": {
+              "type": "string",
+              "description": "Địa chỉ ví nhận token"
+            },
+            "token_amount": {
+              "type": "number",
+              "description": "Số lượng token carbon sẽ được đúc (tCO2e)"
+            },
+            "token_metadata": {
+              "type": "object",
+              "description": "Metadata cho NFT/Token (chuẩn ERC-1155 hoặc ERC-721)",
+              "properties": {
+                "name": { "type": "string" },
+                "description": { "type": "string" },
+                "image": { "type": "string", "format": "uri" },
+                "attributes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "trait_type": { "type": "string" },
+                      "value": { "type": ["string", "number"] }
+                    }
+                  }
+                },
+                "external_url": { "type": "string", "format": "uri" }
+              }
+            },
+            "ipfs_metadata_uri": {
+              "type": "string",
+              "format": "uri",
+              "description": "Link metadata trên IPFS"
+            },
+            "blockchain": {
+              "type": "string",
+              "enum": ["Polygon", "Ethereum", "BSC", "Local"],
+              "default": "Polygon",
+              "description": "Blockchain mà token sẽ được mint"
+            },
+            "smart_contract_address": {
+              "type": "string",
+              "description": "Địa chỉ hợp đồng thông minh quản lý token"
+            },
+            "minting_status": {
+              "type": "string",
+              "enum": ["pending", "processing", "success", "failed"],
+              "default": "pending",
+              "description": "Trạng thái đúc token"
+            },
+            "transaction_hash": {
+              "type": "string",
+              "description": "Hash giao dịch trên blockchain"
+            },
+            "error_log": {
+              "type": "string",
+              "description": "Log lỗi nếu mint thất bại"
+            },
+            "minted_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Thời điểm token được mint thành công"
+            },
+            "created_at": { "type": "string", "format": "date-time" },
+            "updated_at": { "type": "string", "format": "date-time" }
+          },
+          "required": [
+            "_id",
+            "minting_id",
+            "review_id",
+            "user_id",
+            "wallet_address",
+            "token_amount",
+            "minting_status",
+            "created_at"
+          ]
+        }
+      }
+    },
+    "private": {
+      "node_function": {
+        "edge": [
+          {
+            "name": "trigger_token_minting_after_gov_approval",
+            "description": "Kích hoạt đúc token sau khi hồ sơ được cơ quan nhà nước phê duyệt.",
+            "pipeline": [
+              {
+                "$match": {
+                  "review_status": "approved",
+                  "next_action": "mint_tokens"
+                }
+              },
+              {
+                "$lookup": {
+                  "from": "collection_users",
+                  "localField": "user_id",
+                  "foreignField": "user_id",
+                  "as": "user"
+                }
+              },
+              {
+                "$unwind": "$user"
+              },
+              {
+                "$addFields": {
+                  "minting_id": {
+                    "$concat": [
+                      "MINT-",
+                      {
+                        "$dateToString": { "format": "%Y%m%d", "date": "$$NOW" }
+                      },
+                      "-",
+                      { "$substr": [{ "$toString": "$$NOW" }, 0, 6] }
+                    ]
+                  },
+                  "token_metadata": {
+                    "name": {
+                      "$concat": ["VN Carbon Credit - ", "$program_code"]
+                    },
+                    "description": {
+                      "$concat": [
+                        "Tín chỉ carbon chính thức được cấp bởi ",
+                        "$submitted_to_authority.authority_name",
+                        " cho dự án: ",
+                        "$project_name"
+                      ]
+                    },
+                    "image": "https://your-platform.com/images/vn-carbon-token.png",
+                    "attributes": [
+                      {
+                        "trait_type": "Issuing Authority",
+                        "value": "$submitted_to_authority.authority_name"
+                      },
+                      {
+                        "trait_type": "Project",
+                        "value": "$project_name"
+                      },
+                      {
+                        "trait_type": "Methodology",
+                        "value": "$program_code"
+                      },
+                      {
+                        "trait_type": "Quantity",
+                        "value": "$calculated_credits"
+                      },
+                      {
+                        "trait_type": "Unit",
+                        "value": "tCO2e"
+                      },
+                      {
+                        "trait_type": "Approval Date",
+                        "value": {
+                          "$dateToString": {
+                            "format": "%Y-%m-%d",
+                            "date": "$approval_date"
+                          }
+                        }
+                      },
+                      {
+                        "trait_type": "Official Seal Hash",
+                        "value": "$official_seal_hash"
+                      }
+                    ],
+                    "external_url": {
+                      "$concat": [
+                        "https://your-platform.com/gov-review/",
+                        "$review_id"
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "$addFields": {
+                  "ipfs_cid": {
+                    "$function": {
+                      "body": "async function(metadata) { /* Upload to IPFS */ return 'Qm...' + Math.random().toString(36).substring(2, 15); }",
+                      "args": ["$token_metadata"],
+                      "lang": "js"
+                    }
+                  },
+                  "ipfs_metadata_uri": {
+                    "$concat": [
+                      "ipfs://",
+                      {
+                        "$function": {
+                          "body": "async function(metadata) { return 'Qm...' + Math.random().toString(36).substring(2, 15); }",
+                          "args": ["$token_metadata"],
+                          "lang": "js"
+                        }
+                      }
+                    ]
+                  },
+                  "minting_status": "processing",
+                  "created_at": "$$NOW",
+                  "updated_at": "$$NOW"
+                }
+              },
+              {
+                "$project": {
+                  "_id": 0,
+                  "minting_id": 1,
+                  "review_id": 1,
+                  "user_id": 1,
+                  "business_id": 1,
+                  "wallet_address": "$user.wallet_address",
+                  "token_amount": "$calculated_credits",
+                  "token_metadata": 1,
+                  "ipfs_metadata_uri": 1,
+                  "blockchain": { "$literal": "Polygon" },
+                  "smart_contract_address": {
+                    "$literal": "0xYourCarbonTokenContract"
+                  },
+                  "minting_status": 1,
+                  "created_at": 1,
+                  "updated_at": 1
+                }
+              },
+              {
+                "$merge": {
+                  "into": "collection_carbon_token_minting",
+                  "on": "minting_id",
+                  "whenMatched": "replace",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ]
+          },
+          {
+            "name": "execute_blockchain_minting",
+            "description": "Gọi smart contract để thực hiện đúc NFT và Token ERC-20 trên blockchain.",
+            "pipeline": [
+              {
+                "$match": {
+                  "minting_status": "processing"
+                }
+              },
+              {
+                "$addFields": {
+                  "nft_tx_hash": {
+                    "$function": {
+                      "body": "async function(wallet, amount, metadataURI) { /* Gọi hàm mint NFT */ return '0x_nft...' + Math.random().toString(36).substring(2, 64); }",
+                      "args": [
+                        "$wallet_address",
+                        "$token_amount",
+                        "$ipfs_metadata_uri"
+                      ],
+                      "lang": "js"
+                    }
+                  },
+                  "erc20_tx_hash": {
+                    "$function": {
+                      "body": "async function(wallet, amount) { /* Gọi hàm mint ERC-20 */ return '0x_erc20...' + Math.random().toString(36).substring(2, 64); }",
+                      "args": ["$wallet_address", "$token_amount"],
+                      "lang": "js"
+                    }
+                  }
+                }
+              },
+              {
+                "$addFields": {
+                  "minting_status": "success",
+                  "transaction_hash": "$nft_tx_hash",
+                  "minted_at": "$$NOW",
+                  "updated_at": "$$NOW"
+                }
+              },
+
+              {
+                "$addFields": {
+                  "fungible_token_record": {
+                    "token_id": {
+                      "$concat": [
+                        "VNCR-",
+                        "$wallet_address",
+                        "-",
+                        "$minting_id"
+                      ]
+                    },
+                    "minting_id": "$minting_id",
+                    "review_id": "$review_id",
+                    "user_id": "$user_id",
+                    "business_id": "$business_id",
+                    "wallet_address": "$wallet_address",
+                    "amount": "$token_amount",
+                    "contract_address": "0xYourERC20ContractAddress",
+                    "token_symbol": "VNCR",
+                    "token_name": "Vietnam Carbon Credit",
+                    "decimals": 6,
+                    "status": "active",
+                    "created_at": "$$NOW",
+                    "updated_at": "$$NOW"
+                  }
+                }
+              },
+              {
+                "$merge": {
+                  "into": "collection_carbon_fungible_tokens",
+                  "on": "token_id",
+                  "whenMatched": "merge",
+                  "whenNotMatched": "insert"
+                }
+              },
+
+              {
+                "$merge": {
+                  "into": "collection_carbon_wallet_balances",
+                  "on": "user_id",
+                  "whenMatched": {
+                    "$addFields": {
+                      "carbon_token_balance": {
+                        "$add": ["$carbon_token_balance", "$token_amount"]
+                      },
+                      "last_updated": "$$NOW"
+                    }
+                  },
+                  "whenNotMatched": {
+                    "$addFields": {
+                      "carbon_token_balance": "$token_amount",
+                      "vnd_balance": 0,
+                      "usdc_balance": 0,
+                      "eth_balance": 0,
+                      "locked_carbon_balance": 0,
+                      "locked_fiat_balance": 0,
+                      "last_updated": "$$NOW",
+                      "created_at": "$$NOW"
+                    }
+                  }
+                }
+              },
+
+              {
+                "$addFields": {
+                  "update_iot_status": {
+                    "$function": {
+                      "body": "function(reviewId) { /* Tìm evidence_id từ review_id, sau đó cập nhật status */ const evidenceIds = db.collection('collection_government_review').findOne({ review_id: reviewId }).evidence_list.map(e => e.evidence_id); db.collection('collection_iot_data_ingestion').updateMany( { 'mapped_evidence_id': { $in: evidenceIds } }, { $set: { 'status': 'gov_approved', 'updated_at': new Date() } } ); return { updated: evidenceIds.length }; }",
+                      "args": ["$review_id"],
+                      "lang": "js"
+                    }
+                  }
+                }
+              },
+
+              {
+                "$unset": [
+                  "nft_tx_hash",
+                  "erc20_tx_hash",
+                  "fungible_token_record",
+                  "update_iot_status"
+                ]
+              },
+              {
+                "$merge": {
+                  "into": "collection_carbon_token_minting",
+                  "on": "minting_id",
+                  "whenMatched": "merge",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "_id": "collection_carbon_fungible_tokens",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "CarbonFungibleToken",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "token_id": {
+              "type": "string",
+              "unique": true,
+              "description": "Mã định danh duy nhất của token (có thể là contract address + user_id)"
+            },
+            "minting_id": {
+              "type": "string",
+              "description": "Liên kết đến bản ghi trong collection_carbon_token_minting (nguồn gốc của token)"
+            },
+            "review_id": {
+              "type": "string",
+              "description": "Liên kết đến hồ sơ chính phủ đã phê duyệt"
+            },
+            "user_id": {
+              "type": "string",
+              "description": "Chủ sở hữu hiện tại của token"
+            },
+            "wallet_address": {
+              "type": "string",
+              "description": "Ví blockchain của chủ sở hữu"
+            },
+            "amount": {
+              "type": "number",
+              "minimum": 0.000001,
+              "description": "Số lượng token (tCO2e) mà người dùng sở hữu"
+            },
+            "contract_address": {
+              "type": "string",
+              "description": "Địa chỉ hợp đồng ERC-20 trên blockchain"
+            },
+            "token_symbol": {
+              "type": "string",
+              "default": "VNCR",
+              "description": "Ký hiệu token (ví dụ: VNCR)"
+            },
+            "token_name": {
+              "type": "string",
+              "default": "Vietnam Carbon Credit",
+              "description": "Tên đầy đủ của token"
+            },
+            "decimals": {
+              "type": "integer",
+              "default": 6,
+              "description": "Số chữ số thập phân (thường là 6 hoặc 18)"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["active", "locked", "burned"],
+              "default": "active",
+              "description": "Trạng thái token: đang lưu hành, đang khóa trong lệnh, đã hủy"
+            },
+            "created_at": { "type": "string", "format": "date-time" },
+            "updated_at": { "type": "string", "format": "date-time" }
+          },
+          "required": [
+            "_id",
+            "token_id",
+            "minting_id",
+            "user_id",
+            "wallet_address",
+            "amount",
+            "contract_address",
+            "created_at"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "_id": "collection_carbon_orders",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "CarbonOrder",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "order_id": {
+              "type": "string",
+              "unique": true,
+              "description": "Mã lệnh duy nhất"
+            },
+            "user_id": {
+              "type": "string",
+              "description": "Người đặt lệnh"
+            },
+            "wallet_address": {
+              "type": "string",
+              "description": "Ví của người đặt lệnh"
+            },
+            "order_type": {
+              "type": "string",
+              "enum": ["buy", "sell"],
+              "description": "Loại lệnh: Mua hoặc Bán"
+            },
+            "token_amount": {
+              "type": "number",
+              "minimum": 0.000001,
+              "description": "Số lượng token muốn mua/bán"
+            },
+            "price_per_token": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Giá mỗi token (VND, USD, hoặc stablecoin như USDC)"
+            },
+            "total_value": {
+              "type": "number",
+              "description": "Tổng giá trị lệnh = token_amount * price_per_token"
+            },
+            "currency": {
+              "type": "string",
+              "enum": ["VND", "USD", "USDC", "ETH", "BTC"],
+              "default": "VND",
+              "description": "Đơn vị tiền tệ thanh toán"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "open",
+                "partially_filled",
+                "filled",
+                "cancelled",
+                "expired"
+              ],
+              "default": "open",
+              "description": "Trạng thái lệnh"
+            },
+            "valid_until": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Thời gian hết hạn của lệnh"
+            },
+            "created_at": { "type": "string", "format": "date-time" },
+            "updated_at": { "type": "string", "format": "date-time" },
+            "filled_amount": {
+              "type": "number",
+              "default": 0,
+              "description": "Số lượng token đã giao dịch thành công"
+            },
+            "transactions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Danh sách ID giao dịch đã khớp với lệnh này"
+            }
+          },
+          "required": [
+            "_id",
+            "order_id",
+            "user_id",
+            "order_type",
+            "token_amount",
+            "price_per_token",
+            "currency",
+            "status",
+            "created_at"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "_id": "collection_carbon_transactions",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "CarbonTransaction",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "tx_id": {
+              "type": "string",
+              "unique": true,
+              "description": "Mã giao dịch duy nhất"
+            },
+            "buy_order_id": {
+              "type": "string",
+              "description": "ID lệnh mua"
+            },
+            "sell_order_id": {
+              "type": "string",
+              "description": "ID lệnh bán"
+            },
+            "buyer_user_id": {
+              "type": "string",
+              "description": "ID người mua"
+            },
+            "seller_user_id": {
+              "type": "string",
+              "description": "ID người bán"
+            },
+            "token_amount": {
+              "type": "number",
+              "description": "Số lượng token được giao dịch"
+            },
+            "price_per_token": {
+              "type": "number",
+              "description": "Giá mỗi token tại thời điểm giao dịch"
+            },
+            "total_value": {
+              "type": "number",
+              "description": "Tổng giá trị giao dịch"
+            },
+            "currency": {
+              "type": "string",
+              "description": "Đơn vị tiền tệ"
+            },
+            "blockchain_tx_hash": {
+              "type": "string",
+              "description": "Hash giao dịch chuyển token trên blockchain"
+            },
+            "payment_tx_hash": {
+              "type": "string",
+              "description": "Hash giao dịch thanh toán (nếu dùng crypto)"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["pending", "completed", "failed", "refunded"],
+              "default": "pending",
+              "description": "Trạng thái giao dịch"
+            },
+            "executed_at": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Thời điểm giao dịch được thực hiện"
+            },
+            "created_at": { "type": "string", "format": "date-time" },
+            "updated_at": { "type": "string", "format": "date-time" }
+          },
+          "required": [
+            "_id",
+            "tx_id",
+            "buy_order_id",
+            "sell_order_id",
+            "buyer_user_id",
+            "seller_user_id",
+            "token_amount",
+            "price_per_token",
+            "currency",
+            "status",
+            "created_at"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "_id": "collection_carbon_wallet_balances",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "CarbonWalletBalance",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "user_id": {
+              "type": "string",
+              "unique": true,
+              "description": "ID người dùng"
+            },
+            "wallet_address": {
+              "type": "string",
+              "description": "Địa chỉ ví blockchain"
+            },
+            "carbon_token_balance": {
+              "type": "number",
+              "minimum": 0,
+              "default": 0,
+              "description": "Số dư token carbon (VNCR)"
+            },
+            "vnd_balance": {
+              "type": "number",
+              "minimum": 0,
+              "default": 0,
+              "description": "Số dư tiền VND trong tài khoản (nếu hỗ trợ fiat)"
+            },
+            "usdc_balance": {
+              "type": "number",
+              "minimum": 0,
+              "default": 0,
+              "description": "Số dư USDC"
+            },
+            "eth_balance": {
+              "type": "number",
+              "minimum": 0,
+              "default": 0,
+              "description": "Số dư ETH"
+            },
+            "locked_carbon_balance": {
+              "type": "number",
+              "minimum": 0,
+              "default": 0,
+              "description": "Số token đang bị khóa trong các lệnh bán chưa khớp"
+            },
+            "locked_fiat_balance": {
+              "type": "number",
+              "minimum": 0,
+              "default": 0,
+              "description": "Số tiền đang bị khóa trong các lệnh mua chưa khớp"
+            },
+            "last_updated": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Thời điểm cập nhật số dư gần nhất"
+            },
+            "created_at": { "type": "string", "format": "date-time" }
+          },
+          "required": ["_id", "user_id", "wallet_address", "created_at"]
+        }
+      }
+    }
+  },
+
+  {
+    "_id": "collection_tax_documents",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "TaxDocument",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+
+            "user_id": {
+              "type": "string",
+              "description": "Liên kết collection_users"
+            },
+            "business_id": { "type": "string", "description": "Mã hộ KD" },
+
+            "doc_type": {
+              "type": "string",
+              "enum": [
+                "sale_agri",
+                "purchase_agri",
+                "sale_token",
+                "purchase_token",
+                "expense",
+                "other_income"
+              ],
+              "description": "Loại chứng từ: bán nông sản / mua nông sản / bán token / mua token / chi phí / thu nhập khác"
+            },
+            "doc_no": { "type": "string", "description": "Số chứng từ nội bộ" },
+            "issue_date": {
+              "type": "string",
+              "format": "date",
+              "description": "Ngày lập"
+            },
+
+            "einvoice": {
+              "type": "object",
+              "description": "Thông tin hóa đơn điện tử theo NĐ 123/2020",
+              "properties": {
+                "invoice_series": { "type": "string" },
+                "invoice_number": { "type": "string" },
+                "invoice_date": { "type": "string", "format": "date" },
+                "supplier_tax_id": { "type": "string" },
+                "buyer_tax_id": { "type": "string" },
+                "signed_xml_hash": {
+                  "type": "string",
+                  "description": "Hash file hóa đơn"
+                },
+                "portal_ref": {
+                  "type": "string",
+                  "description": "Mã tham chiếu CQT (nếu có)"
+                }
+              }
+            },
+
+            "counterparty": {
+              "type": "object",
+              "description": "Thông tin bên mua/bên bán",
+              "properties": {
+                "name": { "type": "string" },
+                "tax_id": { "type": "string" },
+                "address": { "type": "string" },
+                "phone": { "type": "string" }
+              }
+            },
+
+            "lines": {
+              "type": "array",
+              "description": "Các dòng hàng",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "line_id": { "type": "string" },
+                  "product_code": {
+                    "type": "string",
+                    "description": "Mã hàng nội bộ/GS1/lot"
+                  },
+                  "product_name": { "type": "string" },
+                  "vsic_code": {
+                    "type": "string",
+                    "description": "Mã ngành (nếu cần phân loại)"
+                  },
+                  "agri_category": {
+                    "type": "string",
+                    "enum": [
+                      "unprocessed",
+                      "processed",
+                      "input_material",
+                      "service"
+                    ],
+                    "description": "Nông sản thô / đã chế biến / vật tư / dịch vụ"
+                  },
+                  "harvest_lot_id": {
+                    "type": "string",
+                    "description": "Liên kết lô thu hoạch (truy xuất nguồn gốc)"
+                  },
+                  "uom": {
+                    "type": "string",
+                    "description": "Đơn vị tính (kg, tấn, thùng...)"
+                  },
+                  "quantity": { "type": "number" },
+                  "unit_price": { "type": "number" },
+
+                  "vat_scheme": {
+                    "type": "object",
+                    "description": "Chính sách GTGT theo thời điểm",
+                    "properties": {
+                      "vat_category": {
+                        "type": "string",
+                        "enum": [
+                          "non_taxable",
+                          "exempt",
+                          "zero",
+                          "five",
+                          "ten"
+                        ],
+                        "description": "Không chịu/miễn/0%/5%/10%"
+                      },
+                      "vat_rate": {
+                        "type": "number",
+                        "description": "Thuế suất thực tế áp dụng (%)"
+                      },
+                      "legal_basis": {
+                        "type": "string",
+                        "description": "Căn cứ pháp lý nội bộ (link/văn bản)"
+                      }
+                    }
+                  },
+
+                  "pit_household_rate": {
+                    "type": "number",
+                    "description": "Tỷ lệ TNCN trên doanh thu (nếu áp dụng theo TT40/2021, tùy ngành)"
+                  },
+
+                  "vat_amount": { "type": "number" },
+                  "line_amount": {
+                    "type": "number",
+                    "description": "Thành tiền trước thuế"
+                  },
+                  "line_amount_with_tax": {
+                    "type": "number",
+                    "description": "Thành tiền đã gồm VAT (nếu có)"
+                  }
+                },
+                "required": [
+                  "line_id",
+                  "product_name",
+                  "uom",
+                  "quantity",
+                  "unit_price"
+                ]
+              }
+            },
+
+            "totals": {
+              "type": "object",
+              "properties": {
+                "subtotal": { "type": "number" },
+                "vat_total": { "type": "number" },
+                "grand_total": { "type": "number" }
+              }
+            },
+
+            "payment": {
+              "type": "object",
+              "properties": {
+                "method": {
+                  "type": "string",
+                  "enum": ["cash", "bank", "qr_wallet", "other"]
+                },
+                "ref_no": {
+                  "type": "string",
+                  "description": "Số giao dịch/ủy nhiệm chi/mã QR"
+                },
+                "paid_date": { "type": "string", "format": "date" }
+              }
+            },
+
+            "attachments": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "URL/file chứng từ scan: phiếu cân, phiếu nhập kho, hợp đồng, vận chuyển..."
+            },
+
+            "notes": { "type": "string" },
+
+            "created_at": { "type": "string", "format": "date-time" },
+            "updated_at": { "type": "string", "format": "date-time" },
+            "status": {
+              "type": "string",
+              "enum": ["draft", "posted", "void"],
+              "default": "posted"
+            }
+          },
+          "required": [
+            "_id",
+            "user_id",
+            "business_id",
+            "doc_type",
+            "issue_date",
+            "lines",
+            "created_at"
+          ]
+        },
+        "jsonSample": [
+          {
+            "_id": "TAXDOC_0001",
+            "user_id": "user_farm_001",
+            "business_id": "HKD_00012345",
+            "doc_type": "sale",
+            "doc_no": "S0001",
+            "issue_date": "2025-08-15",
+            "einvoice": {
+              "invoice_series": "1K24T",
+              "invoice_number": "0000123",
+              "invoice_date": "2025-08-15",
+              "supplier_tax_id": "0123456789",
+              "buyer_tax_id": "0312345678",
+              "signed_xml_hash": "abcf123...",
+              "portal_ref": "CQT-20250815-XYZ"
+            },
+            "counterparty": {
+              "name": "Công ty Phân phối Nông sản X",
+              "tax_id": "0312345678",
+              "address": "Q.1, TP.HCM"
+            },
+            "lines": [
+              {
+                "line_id": "L1",
+                "product_code": "RAU-SACH-LOT08",
+                "product_name": "Rau xà lách (lô 08/2025)",
+                "agri_category": "unprocessed",
+                "harvest_lot_id": "LOT_2025_08_001",
+                "uom": "kg",
+                "quantity": 500,
+                "unit_price": 18000,
+                "vat_scheme": {
+                  "vat_category": "five",
+                  "vat_rate": 5,
+                  "legal_basis": "policy_2025_07"
+                },
+                "pit_household_rate": 0.5,
+                "vat_amount": 450000,
+                "line_amount": 9000000,
+                "line_amount_with_tax": 9450000
+              }
+            ],
+            "totals": {
+              "subtotal": 9000000,
+              "vat_total": 450000,
+              "grand_total": 9450000
+            },
+            "payment": {
+              "method": "bank",
+              "ref_no": "FT2520815ABC",
+              "paid_date": "2025-08-15"
+            },
+            "created_at": "2025-08-15T10:00:00Z",
+            "updated_at": "2025-08-15T10:05:00Z",
+            "status": "posted"
+          }
+        ]
+      }
+    }
+  },
+
+  {
+    "_id": "collection_tax_monthly_filings",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "MonthlyTaxFiling",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "user_id": { "type": "string" },
+            "business_id": { "type": "string" },
+            "period": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$",
+              "description": "Kỳ tính thuế YYYY-MM"
+            },
+
+            "sales_summary": {
+              "type": "object",
+              "properties": {
+                "taxable_0": { "type": "number" },
+                "taxable_5": { "type": "number" },
+                "taxable_10": { "type": "number" },
+                "exempt_or_non_taxable": { "type": "number" },
+                "vat_output": { "type": "number" },
+                "pit_household_revenue": {
+                  "type": "number",
+                  "description": "Doanh thu tính TNCN hộ KD"
+                },
+                "pit_amount": { "type": "number" }
+              }
+            },
+
+            "purchase_summary": {
+              "type": "object",
+              "properties": {
+                "vat_input_credited": { "type": "number" },
+                "expense_total": { "type": "number" }
+              }
+            },
+
+            "levies": {
+              "type": "object",
+              "properties": {
+                "business_license_tax": {
+                  "type": "number",
+                  "description": "Thuế môn bài (nếu áp dụng)"
+                }
+              }
+            },
+
+            "payable_summary": {
+              "type": "object",
+              "properties": {
+                "vat_payable": { "type": "number" },
+                "pit_payable": { "type": "number" },
+                "other_payable": { "type": "number" },
+                "total_payable": { "type": "number" }
+              }
+            },
+
+            "filing_status": {
+              "type": "string",
+              "enum": ["draft", "ready", "submitted", "accepted", "rejected"],
+              "default": "draft"
+            },
+            "submission_time": { "type": "string", "format": "date-time" },
+            "tax_office": { "type": "string" },
+
+            "attachments": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "BCT thuế (PDF/XML), bảng kê, tờ khai"
+            },
+
+            "created_at": { "type": "string", "format": "date-time" },
+            "updated_at": { "type": "string", "format": "date-time" }
+          },
+          "required": ["_id", "user_id", "business_id", "period", "created_at"]
+        },
+        "jsonSample": [
+          {
+            "_id": "FILING_2025-08_user_farm_001",
+            "user_id": "user_farm_001",
+            "business_id": "HKD_00012345",
+            "period": "2025-08",
+            "sales_summary": {
+              "taxable_0": 0,
+              "taxable_5": 9000000,
+              "taxable_10": 0,
+              "exempt_or_non_taxable": 0,
+              "vat_output": 450000,
+              "pit_household_revenue": 9000000,
+              "pit_amount": 45000
+            },
+            "purchase_summary": {
+              "vat_input_credited": 120000,
+              "expense_total": 1500000
+            },
+            "levies": {
+              "business_license_tax": 0
+            },
+            "payable_summary": {
+              "vat_payable": 330000,
+              "pit_payable": 45000,
+              "other_payable": 0,
+              "total_payable": 375000
+            },
+            "filing_status": "ready",
+            "tax_office": "Chi cục Thuế Huyện C",
+            "created_at": "2025-08-31T10:00:00Z",
+            "updated_at": "2025-08-31T10:15:00Z"
+          }
+        ]
+      }
+    }
+  },
+
+  {
+    "_id": "collection_monthly_tax_submission",
+    "public": {
+      "node_data": {
+        "jsonSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "title": "MonthlyTaxSubmission",
+          "type": "object",
+          "properties": {
+            "_id": { "type": "string" },
+            "user_id": { "type": "string" },
+            "business_id": { "type": "string" },
+
+            "period": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$",
+              "description": "Kỳ khai thuế YYYY-MM"
+            },
+
+            "source_documents": {
+              "type": "array",
+              "description": "Danh sách chứng từ đã tổng hợp",
+              "items": { "type": "string" }
+            },
+
+            "vat_report": {
+              "type": "object",
+              "description": "Chi tiết kê khai GTGT theo mẫu 01/GTGT",
+              "properties": {
+                "output_taxable": {
+                  "type": "object",
+                  "properties": {
+                    "taxable_0": { "type": "number" },
+                    "taxable_5": { "type": "number" },
+                    "taxable_10": { "type": "number" },
+                    "exempt": { "type": "number" }
+                  }
+                },
+                "vat_output": { "type": "number" },
+                "input_vat_creditable": { "type": "number" },
+                "input_vat_non_creditable": { "type": "number" },
+                "vat_payable": { "type": "number" }
+              }
+            },
+
+            "pit_household": {
+              "type": "object",
+              "description": "Thuế TNCN hộ kinh doanh (theo TT40/2021)",
+              "properties": {
+                "revenue": { "type": "number" },
+                "pit_rate": { "type": "number" },
+                "pit_amount": { "type": "number" }
+              }
+            },
+
+            "business_income_tax": {
+              "type": "object",
+              "description": "Thuế TNDN (nếu DN áp dụng, hộ KD không có)",
+              "properties": {
+                "revenue": { "type": "number" },
+                "deductible_expenses": { "type": "number" },
+                "taxable_income": { "type": "number" },
+                "tax_rate": { "type": "number" },
+                "tax_amount": { "type": "number" }
+              }
+            },
+
+            "other_taxes_fees": {
+              "type": "object",
+              "properties": {
+                "business_license_tax": { "type": "number" },
+                "environmental_fee": { "type": "number" },
+                "other": { "type": "number" }
+              }
+            },
+
+            "final_summary": {
+              "type": "object",
+              "properties": {
+                "total_vat_payable": { "type": "number" },
+                "total_pit_payable": { "type": "number" },
+                "total_tndn_payable": { "type": "number" },
+                "total_other_payable": { "type": "number" },
+                "grand_total_payable": { "type": "number" }
+              }
+            },
+
+            "status": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "reviewed",
+                "submitted",
+                "accepted",
+                "rejected"
+              ],
+              "default": "draft"
+            },
+
+            "submission_meta": {
+              "type": "object",
+              "properties": {
+                "tax_office": { "type": "string" },
+                "submitted_by": { "type": "string" },
+                "submission_time": { "type": "string", "format": "date-time" },
+                "attachments": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Tệp đính kèm (tờ khai XML/PDF, bảng kê chi tiết)"
+                }
+              }
+            },
+
+            "created_at": { "type": "string", "format": "date-time" },
+            "updated_at": { "type": "string", "format": "date-time" }
+          },
+          "required": ["_id", "user_id", "business_id", "period", "created_at"]
+        },
+        "jsonSample": [
+          {
+            "_id": "SUBMISSION_2025-08_user_farm_001",
+            "user_id": "user_farm_001",
+            "business_id": "HKD_00012345",
+            "period": "2025-08",
+            "source_documents": ["TAXDOC_0001"],
+
+            "vat_report": {
+              "output_taxable": {
+                "taxable_0": 0,
+                "taxable_5": 9000000,
+                "taxable_10": 0,
+                "exempt": 0
+              },
+              "vat_output": 450000,
+              "input_vat_creditable": 120000,
+              "input_vat_non_creditable": 0,
+              "vat_payable": 330000
+            },
+
+            "pit_household": {
+              "revenue": 9000000,
+              "pit_rate": 0.5,
+              "pit_amount": 45000
+            },
+
+            "business_income_tax": {
+              "revenue": 0,
+              "deductible_expenses": 0,
+              "taxable_income": 0,
+              "tax_rate": 0,
+              "tax_amount": 0
+            },
+
+            "other_taxes_fees": {
+              "business_license_tax": 0,
+              "environmental_fee": 0,
+              "other": 0
+            },
+
+            "final_summary": {
+              "total_vat_payable": 330000,
+              "total_pit_payable": 45000,
+              "total_tndn_payable": 0,
+              "total_other_payable": 0,
+              "grand_total_payable": 375000
+            },
+
+            "status": "reviewed",
+            "submission_meta": {
+              "tax_office": "Chi cục Thuế Huyện C",
+              "submitted_by": "user_farm_001",
+              "submission_time": "2025-08-31T12:00:00Z",
+              "attachments": ["FILING_2025-08_user_farm_001.pdf"]
+            },
+
+            "created_at": "2025-08-31T10:00:00Z",
+            "updated_at": "2025-08-31T12:10:00Z"
+          }
+        ]
+      }
+    },
+    "private": {
+      "node_function": {
+        "edge": [
+          {
+            "pipeline": [
+              {
+                "$match": {
+                  "_id": { "$exists": true },
+                  "status": { "$in": ["draft", "posted"] }
+                }
+              },
+
+              { "$unwind": "$lines" },
+
+              {
+                "$lookup": {
+                  "from": "collection_harvest_lots",
+                  "localField": "lines.harvest_lot_id",
+                  "foreignField": "_id",
+                  "as": "lot"
+                }
+              },
+              {
+                "$unwind": {
+                  "path": "$lot",
+                  "preserveNullAndEmptyArrays": true
+                }
+              },
+
+              {
+                "$addFields": {
+                  "effective_vsic": {
+                    "$ifNull": ["$lines.vsic_code", "$lot.vsic_code"]
+                  },
+                  "effective_date": "$issue_date"
+                }
+              },
+
+              {
+                "$lookup": {
+                  "from": "collection_tax_config",
+                  "let": { "vsic": "$effective_vsic", "d": "$effective_date" },
+                  "pipeline": [
+                    {
+                      "$match": {
+                        "$expr": {
+                          "$and": [
+                            { "$eq": ["$vsic_code", "$$vsic"] },
+                            { "$lte": ["$effective_from", "$$d"] },
+                            {
+                              "$or": [
+                                { "$eq": ["$effective_to", null] },
+                                { "$gte": ["$effective_to", "$$d"] }
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    { "$sort": { "effective_from": -1 } },
+                    { "$limit": 1 }
+                  ],
+                  "as": "cfg"
+                }
+              },
+              {
+                "$unwind": {
+                  "path": "$cfg",
+                  "preserveNullAndEmptyArrays": true
+                }
+              },
+
+              {
+                "$addFields": {
+                  "lines.vat_scheme.vat_rate": {
+                    "$ifNull": [
+                      "$lines.vat_scheme.vat_rate",
+                      {
+                        "$cond": [
+                          { "$eq": ["$lines.vat_scheme.vat_category", "five"] },
+                          5,
+                          {
+                            "$cond": [
+                              {
+                                "$eq": ["$lines.vat_scheme.vat_category", "ten"]
+                              },
+                              10,
+                              {
+                                "$cond": [
+                                  {
+                                    "$eq": [
+                                      "$lines.vat_scheme.vat_category",
+                                      "zero"
+                                    ]
+                                  },
+                                  0,
+                                  { "$ifNull": ["$cfg.vat_rate", 0] }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "lines.pit_household_rate": {
+                    "$ifNull": [
+                      "$lines.pit_household_rate",
+                      "$cfg.pit_household_rate"
+                    ]
+                  }
+                }
+              },
+
+              {
+                "$addFields": {
+                  "lines.line_amount": {
+                    "$ifNull": [
+                      "$lines.line_amount",
+                      { "$multiply": ["$lines.quantity", "$lines.unit_price"] }
+                    ]
+                  },
+                  "lines.vat_amount": {
+                    "$cond": {
+                      "if": {
+                        "$in": [
+                          "$doc_type",
+                          ["sale_agri", "purchase_agri", "expense"]
+                        ]
+                      },
+                      "then": {
+                        "$divide": [
+                          {
+                            "$multiply": [
+                              "$lines.line_amount",
+                              "$lines.vat_scheme.vat_rate"
+                            ]
+                          },
+                          100
+                        ]
+                      },
+                      "else": 0
+                    }
+                  },
+                  "lines.pit_amount": {
+                    "$cond": {
+                      "if": { "$eq": ["$doc_type", "sale_agri"] },
+                      "then": {
+                        "$multiply": [
+                          "$lines.line_amount",
+                          { "$ifNull": ["$lines.pit_household_rate", 0] }
+                        ]
+                      },
+                      "else": {
+                        "$cond": {
+                          "if": { "$eq": ["$doc_type", "sale_token"] },
+                          "then": {
+                            "$multiply": ["$lines.line_amount", 0.02]
+                          },
+                          "else": 0
+                        }
+                      }
+                    }
+                  },
+                  "lines.line_amount_with_tax": {
+                    "$add": [
+                      "$lines.line_amount",
+                      {
+                        "$cond": [
+                          {
+                            "$in": [
+                              "$doc_type",
+                              ["sale", "purchase", "expense"]
+                            ]
+                          },
+                          {
+                            "$divide": [
+                              {
+                                "$multiply": [
+                                  "$lines.line_amount",
+                                  "$lines.vat_scheme.vat_rate"
+                                ]
+                              },
+                              100
+                            ]
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+
+              {
+                "$group": {
+                  "_id": "$_id",
+                  "doc": { "$first": "$$ROOT" },
+                  "lines": { "$push": "$lines" },
+                  "subtotal": { "$sum": "$lines.line_amount" },
+                  "vat_total": { "$sum": "$lines.vat_amount" },
+                  "grand_total": { "$sum": "$lines.line_amount_with_tax" }
+                }
+              },
+
+              {
+                "$addFields": {
+                  "doc.lines": "$lines",
+                  "doc.totals.subtotal": "$subtotal",
+                  "doc.totals.vat_total": "$vat_total",
+                  "doc.totals.grand_total": "$grand_total"
+                }
+              },
+
+              { "$replaceRoot": { "newRoot": "$doc" } },
+
+              {
+                "$merge": {
+                  "into": "collection_tax_documents",
+                  "on": "_id",
+                  "whenMatched": "replace",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ],
+            "purpose": "Map thuế suất từ collection_tax_config theo VSIC & ngày chứng từ; tính VAT/PIT/Total cho từng dòng và tổng chứng từ.",
+            "data_input_from_node": [
+              "collection_tax_documents",
+              "collection_tax_config",
+              "collection_harvest_lots"
+            ],
+            "data_output_to_node": ["collection_tax_documents"]
+          },
+          {
+            "pipeline": [
+              {
+                "$match": {
+                  "business_id": "$business_id",
+                  "issue_date": {
+                    "$gte": "$period_start",
+                    "$lte": "$period_end"
+                  },
+                  "status": "posted"
+                }
+              },
+              {
+                "$addFields": {
+                  "is_sale": { "$eq": ["$doc_type", "sale"] },
+                  "is_purchase": { "$eq": ["$doc_type", "purchase"] },
+                  "is_expense": { "$eq": ["$doc_type", "expense"] }
+                }
+              },
+
+              { "$unwind": "$lines" },
+
+              {
+                "$group": {
+                  "_id": "$_id",
+                  "doc": { "$first": "$$ROOT" },
+                  "vat_output": {
+                    "$sum": { "$cond": ["$is_sale", "$lines.vat_amount", 0] }
+                  },
+                  "vat_input": {
+                    "$sum": {
+                      "$cond": [
+                        { "$or": ["$is_purchase", "$is_expense"] },
+                        "$lines.vat_amount",
+                        0
+                      ]
+                    }
+                  },
+                  "revenue": {
+                    "$sum": { "$cond": ["$is_sale", "$lines.line_amount", 0] }
+                  },
+                  "pit_amount": {
+                    "$sum": {
+                      "$cond": [
+                        "$is_sale",
+                        {
+                          "$multiply": [
+                            "$lines.line_amount",
+                            { "$ifNull": ["$lines.pit_household_rate", 0] }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  }
+                }
+              },
+
+              {
+                "$group": {
+                  "_id": "$doc.business_id",
+                  "documents": { "$addToSet": "$_id" },
+                  "vat_output": { "$sum": "$vat_output" },
+                  "vat_input": { "$sum": "$vat_input" },
+                  "revenue_agri": {
+                    "$sum": {
+                      "$cond": [
+                        { "$eq": ["$doc.doc_type", "sale_agri"] },
+                        "$lines.line_amount",
+                        0
+                      ]
+                    }
+                  },
+                  "revenue_token": {
+                    "$sum": {
+                      "$cond": [
+                        { "$eq": ["$doc.doc_type", "sale_token"] },
+                        "$lines.line_amount",
+                        0
+                      ]
+                    }
+                  },
+                  "pit_amount_agri": {
+                    "$sum": {
+                      "$cond": [
+                        { "$eq": ["$doc.doc_type", "sale_agri"] },
+                        {
+                          "$multiply": [
+                            "$lines.line_amount",
+                            { "$ifNull": ["$lines.pit_household_rate", 0] }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  },
+                  "pit_amount_token": {
+                    "$sum": {
+                      "$cond": [
+                        { "$eq": ["$doc.doc_type", "sale_token"] },
+                        {
+                          "$multiply": ["$lines.line_amount", 0.02]
+                        },
+                        0
+                      ]
+                    }
+                  }
+                }
+              },
+
+              {
+                "$addFields": {
+                  "vat_payable": {
+                    "$max": [{ "$subtract": ["$vat_output", "$vat_input"] }, 0]
+                  },
+                  "total_revenue_vnd": {
+                    "$add": ["$revenue_agri", "$revenue_token"]
+                  },
+                  "pit_payable_vnd": {
+                    "$add": ["$pit_amount_agri", "$pit_amount_token"]
+                  }
+                }
+              },
+
+              {
+                "$project": {
+                  "_id": 0,
+                  "business_id": "$$ROOT._id",
+                  "filing_period": "$period",
+                  "documents": 1,
+                  "revenue_agri": 1,
+                  "revenue_token": 1,
+                  "vat_output_vnd": "$vat_output",
+                  "vat_input_vnd": "$vat_input",
+                  "vat_payable_vnd": "$vat_payable",
+                  "pit_amount_agri": 1,
+                  "pit_amount_token": 1,
+                  "pit_payable_vnd": 1,
+                  "total_revenue_vnd": 1,
+                  "status": { "$literal": "draft" },
+                  "created_at": { "$literal": { "$now": [] } }
+                }
+              },
+
+              {
+                "$merge": {
+                  "into": "collection_tax_monthly_filings",
+                  "on": ["business_id", "filing_period"],
+                  "whenMatched": "merge",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ],
+            "purpose": "Sinh tờ khai tháng (draft) từ chứng từ đã post.",
+            "data_input_from_node": ["collection_tax_documents"],
+            "data_output_to_node": ["collection_tax_monthly_filings"]
+          },
+          {
+            "pipeline": [
+              {
+                "$match": {
+                  "business_id": "$business_id",
+                  "filing_period": "$filing_period",
+                  "status": "draft"
+                }
+              },
+
+              {
+                "$lookup": {
+                  "from": "collection_users",
+                  "localField": "business_id",
+                  "foreignField": "business_id",
+                  "as": "user"
+                }
+              },
+              { "$unwind": "$user" },
+
+              {
+                "$addFields": {
+                  "qr_payload": "$$INPUT.qr_payload",
+                  "qr_signature": "$$INPUT.qr_signature"
+                }
+              },
+
+              {
+                "$addFields": {
+                  "verify_result": {
+                    "$function": {
+                      "body": "function(payload, signature, user){ const crypto=require('crypto'); if(!payload||!signature||!user||!user.public_key) return {ok:false,reason:'missing'}; const now=Math.floor(Date.now()/1000); if(payload.exp && payload.exp<now) return {ok:false,reason:'expired'}; if(!payload.scope || !payload.scope.includes('sign_filing')) return {ok:false,reason:'scope'}; const verifier=crypto.createVerify('SHA256'); const data=Buffer.from(JSON.stringify(payload)); verifier.update(data); verifier.end(); const ok=verifier.verify(user.public_key, Buffer.from(signature,'base64')); if(!ok) return {ok:false,reason:'sig_invalid'}; if(payload.uid!==user.user_id || payload.bid!==user.business_id || payload.wa!==user.wallet_address) return {ok:false,reason:'binding'}; return {ok:true,fingerprint:crypto.createHash('sha256').update(user.public_key).digest('hex')}; }",
+                      "args": ["$qr_payload", "$qr_signature", "$user"],
+                      "lang": "js"
+                    }
+                  }
+                }
+              },
+
+              { "$match": { "verify_result.ok": true } },
+
+              {
+                "$set": {
+                  "qr_signature_farmer": "$qr_signature",
+                  "qr_payload_farmer": "$qr_payload",
+                  "status": "ready_for_audit",
+                  "farmer_signed_at": { "$now": [] }
+                }
+              },
+
+              {
+                "$merge": {
+                  "into": "collection_tax_monthly_filings",
+                  "on": ["business_id", "filing_period"],
+                  "whenMatched": "merge",
+                  "whenNotMatched": "insert"
+                }
+              },
+
+              { "$project": { "_id": 0, "result": "ok" } }
+            ],
+            "purpose": "Nông dân ký nộp bằng QR; xác minh ECDSA và ràng buộc payload.",
+            "data_input_from_node": [
+              "collection_tax_monthly_filings",
+              "collection_users"
+            ],
+            "data_output_to_node": ["collection_tax_monthly_filings"]
+          },
+          {
+            "pipeline": [
+              {
+                "$match": {
+                  "business_id": "$business_id",
+                  "filing_period": "$filing_period",
+                  "status": "ready_for_audit"
+                }
+              },
+
+              {
+                "$addFields": {
+                  "audit_payload": "$$INPUT.audit_payload",
+                  "audit_signature": "$$INPUT.audit_signature"
+                }
+              },
+
+              {
+                "$lookup": {
+                  "from": "collection_auditors",
+                  "localField": "audit_payload.auditor_id",
+                  "foreignField": "auditor_id",
+                  "as": "auditor"
+                }
+              },
+              { "$unwind": "$auditor" },
+
+              {
+                "$addFields": {
+                  "audit_verify": {
+                    "$function": {
+                      "body": "function(payload, signature, auditor){ const crypto=require('crypto'); if(!payload||!signature||!auditor||!auditor.public_key) return {ok:false}; if(!payload.scope || !payload.scope.includes('audit_sign')) return {ok:false}; const v=crypto.createVerify('SHA256'); v.update(Buffer.from(JSON.stringify(payload))); v.end(); const ok=v.verify(auditor.public_key, Buffer.from(signature,'base64')); return {ok}; }",
+                      "args": [
+                        "$audit_payload",
+                        "$audit_signature",
+                        "$auditor"
+                      ],
+                      "lang": "js"
+                    }
+                  }
+                }
+              },
+
+              { "$match": { "audit_verify.ok": true } },
+
+              {
+                "$set": {
+                  "qr_signature_auditor": "$audit_signature",
+                  "audit_payload": "$audit_payload",
+                  "status": "submitted",
+                  "submitted_at": { "$now": [] },
+                  "locked": true
+                }
+              },
+
+              {
+                "$merge": {
+                  "into": "collection_tax_monthly_filings",
+                  "on": ["business_id", "filing_period"],
+                  "whenMatched": "merge",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ],
+            "purpose": "Kiểm toán ký xác nhận, chuyển trạng thái submitted và lock filing.",
+            "data_input_from_node": [
+              "collection_tax_monthly_filings",
+              "collection_auditors"
+            ],
+            "data_output_to_node": ["collection_tax_monthly_filings"]
+          },
+          {
+            "pipeline": [
+              {
+                "$match": {
+                  "business_id": "$business_id",
+                  "filing_period": "$filing_period",
+                  "status": "submitted",
+                  "document_hash": { "$exists": true }
+                }
+              },
+
+              {
+                "$addFields": {
+                  "ledger_entry": {
+                    "business_id": "$business_id",
+                    "filing_period": "$filing_period",
+                    "document_hash": "$document_hash",
+                    "farmer_sig": "$qr_signature_farmer",
+                    "auditor_sig": "$qr_signature_auditor",
+                    "timestamp": { "$literal": { "$now": [] } }
+                  }
+                }
+              },
+
+              {
+                "$merge": {
+                  "into": "collection_ledger",
+                  "on": ["business_id", "filing_period", "document_hash"],
+                  "whenMatched": "keepExisting",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ],
+            "purpose": "Ghi bất biến bản tóm lược tờ khai vào sổ cái off-chain.",
+            "data_input_from_node": ["collection_tax_monthly_filings"],
+            "data_output_to_node": ["collection_ledger"]
+          },
+          {
+            "pipeline": [
+              {
+                "$match": {
+                  "business_id": "$business_id",
+                  "filing_period": "$filing_period"
+                }
+              },
+
+              {
+                "$lookup": {
+                  "from": "collection_tax_inbox",
+                  "let": { "bid": "$business_id", "per": "$filing_period" },
+                  "pipeline": [
+                    {
+                      "$match": {
+                        "$expr": {
+                          "$and": [
+                            { "$eq": ["$business_id", "$$bid"] },
+                            { "$eq": ["$filing_period", "$$per"] }
+                          ]
+                        }
+                      }
+                    },
+                    { "$sort": { "received_at": -1 } },
+                    { "$limit": 1 }
+                  ],
+                  "as": "cqt_resp"
+                }
+              },
+              { "$unwind": "$cqt_resp" },
+
+              {
+                "$set": {
+                  "status": {
+                    "$cond": [
+                      { "$eq": ["$cqt_resp.status", "accepted"] },
+                      "accepted",
+                      {
+                        "$cond": [
+                          { "$eq": ["$cqt_resp.status", "rejected"] },
+                          "rejected",
+                          "$status"
+                        ]
+                      }
+                    ]
+                  },
+                  "cqt_reference_no": "$cqt_resp.reference_no",
+                  "cqt_reason": "$cqt_resp.reason",
+                  "accepted_at": {
+                    "$cond": [
+                      { "$eq": ["$cqt_resp.status", "accepted"] },
+                      "$cqt_resp.received_at",
+                      "$$REMOVE"
+                    ]
+                  }
+                }
+              },
+
+              {
+                "$merge": {
+                  "into": "collection_tax_monthly_filings",
+                  "on": ["business_id", "filing_period"],
+                  "whenMatched": "merge",
+                  "whenNotMatched": "insert"
+                }
+              },
+
+              {
+                "$project": {
+                  "_id": 0,
+                  "audit_log": {
+                    "business_id": "$business_id",
+                    "filing_period": "$filing_period",
+                    "status": "$status",
+                    "cqt_ref": "$cqt_reference_no",
+                    "reason": "$cqt_reason",
+                    "ts": { "$now": [] }
+                  }
+                }
+              },
+
+              {
+                "$merge": {
+                  "into": "collection_tax_audit_logs",
+                  "on": [
+                    "audit_log.business_id",
+                    "audit_log.filing_period",
+                    "audit_log.ts"
+                  ],
+                  "whenMatched": "keepExisting",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ],
+            "purpose": "Đồng bộ phản hồi của CQT và lưu audit log.",
+            "data_input_from_node": [
+              "collection_tax_monthly_filings",
+              "collection_tax_inbox"
+            ],
+            "data_output_to_node": [
+              "collection_tax_monthly_filings",
+              "collection_tax_audit_logs"
+            ]
+          },
+          {
+            "pipeline": [
+              {
+                "$match": {
+                  "business_id": "$business_id",
+                  "filing_period": "$filing_period",
+                  "status": "rejected"
+                }
+              },
+
+              {
+                "$addFields": {
+                  "new_id": {
+                    "$function": {
+                      "body": "function(bid, per){ return `amend_${bid}_${per}_${Date.now()}` }",
+                      "args": ["$business_id", "$filing_period"],
+                      "lang": "js"
+                    }
+                  }
+                }
+              },
+
+              {
+                "$project": {
+                  "_id": "$new_id",
+                  "business_id": 1,
+                  "filing_period": 1,
+                  "documents": 1,
+                  "total_revenue_vnd": 1,
+                  "vat_output_vnd": 1,
+                  "vat_input_vnd": 1,
+                  "vat_payable_vnd": 1,
+                  "pit_payable_vnd": 1,
+                  "status": { "$literal": "draft" },
+                  "locked": { "$literal": false },
+                  "amendment_of": {
+                    "$concat": ["$business_id", "_", "$filing_period"]
+                  },
+                  "created_at": "$$NOW"
+                }
+              },
+              {
+                "$merge": {
+                  "into": "collection_tax_monthly_filings",
+                  "on": "_id",
+                  "whenMatched": "keepExisting",
+                  "whenNotMatched": "insert"
+                }
+              }
+            ],
+            "purpose": "Tạo bản nháp điều chỉnh khi tờ khai bị từ chối.",
+            "data_input_from_node": ["collection_tax_monthly_filings"],
+            "data_output_to_node": ["collection_tax_monthly_filings"]
+          }
+        ]
+      }
+    }
+  }
+]
